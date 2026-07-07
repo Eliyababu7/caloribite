@@ -1,98 +1,99 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 export default function HomeScreen() {
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+    <View style={styles.container}>
+      <View style={styles.logoCircle}>
+        <Text style={styles.logoText}>CB</Text>
+      </View>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+      <Text style={styles.title}>CaloriBite</Text>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+      <Text style={styles.tagline}>Every bite. Every rep. Every result.</Text>
 
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+      <Text style={styles.description}>
+        Track your meals, calories, protein, and fitness progress in one simple
+        app.
+      </Text>
+
+      <Pressable style={styles.primaryButton}>
+        <Text style={styles.primaryButtonText}>Get Started</Text>
+      </Pressable>
+
+      <Pressable style={styles.secondaryButton}>
+        <Text style={styles.secondaryButtonText}>
+          I already have an account
+        </Text>
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
+    backgroundColor: "#FFF7F2",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
   },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+  logoCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: "#FF6B4A",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
   },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+  logoText: {
+    color: "#FFFFFF",
+    fontSize: 32,
+    fontWeight: "800",
   },
   title: {
-    textAlign: 'center',
+    fontSize: 42,
+    fontWeight: "800",
+    color: "#143D3C",
+    marginBottom: 8,
   },
-  code: {
-    textTransform: 'uppercase',
+  tagline: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#FF6B4A",
+    marginBottom: 18,
+    textAlign: "center",
   },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+  description: {
+    fontSize: 16,
+    color: "#425756",
+    textAlign: "center",
+    lineHeight: 24,
+    marginBottom: 32,
+    maxWidth: 360,
+  },
+  primaryButton: {
+    backgroundColor: "#143D3C",
+    paddingVertical: 16,
+    paddingHorizontal: 48,
+    borderRadius: 999,
+    marginBottom: 14,
+    width: "100%",
+    maxWidth: 340,
+    alignItems: "center",
+  },
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  secondaryButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+  },
+  secondaryButtonText: {
+    color: "#143D3C",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });
