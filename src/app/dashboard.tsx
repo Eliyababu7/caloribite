@@ -8,6 +8,13 @@ export default function DashboardScreen() {
   const { foodLogs, totalCalories, totalProtein, totalCarbs, totalFat } =
     useFoodLogs();
 
+  const dailyCalorieTarget = 2000;
+  const remainingCalories = Math.max(dailyCalorieTarget - totalCalories, 0);
+  const progressPercentage = Math.min(
+    Math.round((totalCalories / dailyCalorieTarget) * 100),
+    100,
+  );
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.greeting}>Hello, Eliya 👋</Text>
@@ -15,9 +22,37 @@ export default function DashboardScreen() {
       <Text style={styles.title}>Today’s progress</Text>
 
       <View style={styles.card}>
-        <Text style={styles.cardLabel}>Calories consumed</Text>
+        <View style={styles.cardTopRow}>
+          <View>
+            <Text style={styles.cardLabel}>Calories consumed</Text>
+            <Text style={styles.calorieNumber}>{totalCalories} kcal</Text>
+          </View>
 
-        <Text style={styles.calorieNumber}>{totalCalories} kcal</Text>
+          <View style={styles.targetBadge}>
+            <Text style={styles.targetBadgeText}>{progressPercentage}%</Text>
+          </View>
+        </View>
+
+        <View style={styles.progressBarBackground}>
+          <View
+            style={[
+              styles.progressBarFill,
+              { width: `${progressPercentage}%` },
+            ]}
+          />
+        </View>
+
+        <View style={styles.calorieSummaryRow}>
+          <View>
+            <Text style={styles.summaryLabel}>Target</Text>
+            <Text style={styles.summaryValue}>{dailyCalorieTarget} kcal</Text>
+          </View>
+
+          <View>
+            <Text style={styles.summaryLabel}>Remaining</Text>
+            <Text style={styles.summaryValue}>{remainingCalories} kcal</Text>
+          </View>
+        </View>
 
         <Text style={styles.cardSubText}>
           {foodLogs.length === 0
@@ -107,6 +142,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E6DCD6",
   },
+  cardTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+  },
   cardLabel: {
     fontSize: 16,
     color: "#425756",
@@ -116,7 +157,45 @@ const styles = StyleSheet.create({
     fontSize: 42,
     fontWeight: "800",
     color: "#FF6B4A",
-    marginBottom: 8,
+    marginBottom: 18,
+  },
+  targetBadge: {
+    backgroundColor: "#FFF0E9",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  targetBadgeText: {
+    color: "#FF6B4A",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  progressBarBackground: {
+    height: 12,
+    backgroundColor: "#F0E3DC",
+    borderRadius: 999,
+    overflow: "hidden",
+    marginBottom: 18,
+  },
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: "#FF6B4A",
+    borderRadius: 999,
+  },
+  calorieSummaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  summaryLabel: {
+    fontSize: 13,
+    color: "#425756",
+    marginBottom: 4,
+  },
+  summaryValue: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#143D3C",
   },
   cardSubText: {
     fontSize: 15,
