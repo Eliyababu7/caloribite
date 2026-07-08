@@ -5,8 +5,15 @@ import { useFoodLogs } from "../context/FoodLogContext";
 export default function DashboardScreen() {
   const router = useRouter();
 
-  const { foodLogs, totalCalories, totalProtein, totalCarbs, totalFat } =
-    useFoodLogs();
+  const {
+    foodLogs,
+    totalCalories,
+    totalProtein,
+    totalCarbs,
+    totalFat,
+    deleteFoodLog,
+    clearFoodLogs,
+  } = useFoodLogs();
 
   const dailyCalorieTarget = 2000;
   const remainingCalories = Math.max(dailyCalorieTarget - totalCalories, 0);
@@ -89,6 +96,12 @@ export default function DashboardScreen() {
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Today’s food</Text>
+
+        {foodLogs.length > 0 && (
+          <Pressable onPress={clearFoodLogs}>
+            <Text style={styles.clearText}>Clear all</Text>
+          </Pressable>
+        )}
       </View>
 
       {foodLogs.length === 0 ? (
@@ -108,7 +121,13 @@ export default function DashboardScreen() {
               </Text>
             </View>
 
-            <Text style={styles.foodCalories}>{food.calories} kcal</Text>
+            <View style={styles.foodRight}>
+              <Text style={styles.foodCalories}>{food.calories} kcal</Text>
+
+              <Pressable onPress={() => deleteFoodLog(food.id)}>
+                <Text style={styles.deleteText}>Delete</Text>
+              </Pressable>
+            </View>
           </View>
         ))
       )}
@@ -238,11 +257,19 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     marginBottom: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   sectionTitle: {
     fontSize: 22,
     fontWeight: "800",
     color: "#143D3C",
+  },
+  clearText: {
+    color: "#FF6B4A",
+    fontSize: 15,
+    fontWeight: "800",
   },
   emptyCard: {
     backgroundColor: "#FFFFFF",
@@ -287,9 +314,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#425756",
   },
+  foodRight: {
+    alignItems: "flex-end",
+  },
   foodCalories: {
     fontSize: 16,
     fontWeight: "800",
     color: "#FF6B4A",
+  },
+  deleteText: {
+    color: "#C0392B",
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 6,
   },
 });
