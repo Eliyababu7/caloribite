@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  View,
 } from "react-native";
 import { useFoodLogs } from "../context/FoodLogContext";
 
@@ -46,9 +47,19 @@ export default function AddFoodScreen() {
       <Text style={styles.title}>Add food</Text>
 
       <Text style={styles.subtitle}>
-        Enter the food details manually. Later we will add barcode scan and AI
-        meal photo scanning.
+        Add food manually or search from our starter food database.
       </Text>
+
+      <Pressable
+        style={styles.searchButton}
+        onPress={() => router.push("/search-food")}
+      >
+        <Text style={styles.searchButtonText}>Search food database</Text>
+      </Pressable>
+
+      <View style={styles.divider} />
+
+      <Text style={styles.sectionTitle}>Manual entry</Text>
 
       <Text style={styles.label}>Food name</Text>
       <TextInput
@@ -122,7 +133,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#425756",
     lineHeight: 24,
-    marginBottom: 26,
+    marginBottom: 22,
+  },
+  searchButton: {
+    backgroundColor: "#FF6B4A",
+    paddingVertical: 16,
+    borderRadius: 999,
+    alignItems: "center",
+    marginBottom: 22,
+  },
+  searchButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#E6DCD6",
+    marginBottom: 22,
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#143D3C",
+    marginBottom: 18,
   },
   label: {
     fontSize: 15,
