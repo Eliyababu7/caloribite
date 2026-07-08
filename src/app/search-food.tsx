@@ -8,23 +8,10 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useFoodLogs } from "../context/FoodLogContext";
 
 const STARTER_FOODS = [
-  {
-    foodName: "Banana",
-    calories: 105,
-    protein: 1,
-    carbs: 27,
-    fat: 0,
-  },
-  {
-    foodName: "Boiled egg",
-    calories: 78,
-    protein: 6,
-    carbs: 1,
-    fat: 5,
-  },
+  { foodName: "Banana", calories: 105, protein: 1, carbs: 27, fat: 0 },
+  { foodName: "Boiled egg", calories: 78, protein: 6, carbs: 1, fat: 5 },
   {
     foodName: "Chicken breast 100g",
     calories: 165,
@@ -53,13 +40,7 @@ const STARTER_FOODS = [
     carbs: 4,
     fat: 0,
   },
-  {
-    foodName: "Chicken curry",
-    calories: 450,
-    protein: 35,
-    carbs: 40,
-    fat: 15,
-  },
+  { foodName: "Chicken curry", calories: 450, protein: 35, carbs: 40, fat: 15 },
   {
     foodName: "Vegetable biryani",
     calories: 420,
@@ -71,24 +52,29 @@ const STARTER_FOODS = [
 
 export default function SearchFoodScreen() {
   const router = useRouter();
-  const { addFoodLog } = useFoodLogs();
   const [searchText, setSearchText] = useState("");
 
   const filteredFoods = useMemo(() => {
     const query = searchText.trim().toLowerCase();
 
-    if (!query) {
-      return STARTER_FOODS;
-    }
+    if (!query) return STARTER_FOODS;
 
     return STARTER_FOODS.filter((food) =>
       food.foodName.toLowerCase().includes(query),
     );
   }, [searchText]);
 
-  const handleAddFood = (food: (typeof STARTER_FOODS)[number]) => {
-    addFoodLog(food);
-    router.replace("/dashboard");
+  const handleSelectFood = (food: (typeof STARTER_FOODS)[number]) => {
+    router.push({
+      pathname: "/confirm-food",
+      params: {
+        foodName: food.foodName,
+        calories: String(food.calories),
+        protein: String(food.protein),
+        carbs: String(food.carbs),
+        fat: String(food.fat),
+      },
+    });
   };
 
   return (
@@ -96,8 +82,8 @@ export default function SearchFoodScreen() {
       <Text style={styles.title}>Search food</Text>
 
       <Text style={styles.subtitle}>
-        Search our starter food database. Later we will connect this to a real
-        nutrition API.
+        Search our starter food database. Select a food, then confirm or edit
+        the details before saving.
       </Text>
 
       <TextInput
@@ -117,7 +103,7 @@ export default function SearchFoodScreen() {
         <Pressable
           key={food.foodName}
           style={styles.foodCard}
-          onPress={() => handleAddFood(food)}
+          onPress={() => handleSelectFood(food)}
         >
           <View style={styles.foodInfo}>
             <Text style={styles.foodName}>{food.foodName}</Text>
@@ -128,7 +114,7 @@ export default function SearchFoodScreen() {
 
           <View style={styles.foodRight}>
             <Text style={styles.foodCalories}>{food.calories} kcal</Text>
-            <Text style={styles.addText}>Add</Text>
+            <Text style={styles.addText}>Select</Text>
           </View>
         </Pressable>
       ))}
