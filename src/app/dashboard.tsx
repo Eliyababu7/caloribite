@@ -1,6 +1,9 @@
+import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 export default function DashboardScreen() {
+  const router = useRouter();
+
   return (
     <View style={styles.container}>
       <Text style={styles.greeting}>Hello, Eliya 👋</Text>
@@ -32,7 +35,10 @@ export default function DashboardScreen() {
         </View>
       </View>
 
-      <Pressable style={styles.primaryButton}>
+      <Pressable
+        style={styles.primaryButton}
+        onPress={() => router.push("/add-food")}
+      >
         <Text style={styles.primaryButtonText}>Add food</Text>
       </Pressable>
     </View>
