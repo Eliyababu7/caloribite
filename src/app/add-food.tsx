@@ -7,9 +7,11 @@ import {
   Text,
   TextInput,
 } from "react-native";
+import { useFoodLogs } from "../context/FoodLogContext";
 
 export default function AddFoodScreen() {
   const router = useRouter();
+  const { addFoodLog } = useFoodLogs();
 
   const [foodName, setFoodName] = useState("");
   const [calories, setCalories] = useState("");
@@ -18,9 +20,25 @@ export default function AddFoodScreen() {
   const [fat, setFat] = useState("");
 
   const handleSave = () => {
-    // Temporary for now.
-    // Later this will save into Supabase database.
-    router.push("/dashboard");
+    if (!foodName.trim()) {
+      alert("Please enter the food name.");
+      return;
+    }
+
+    if (!calories.trim()) {
+      alert("Please enter the calories.");
+      return;
+    }
+
+    addFoodLog({
+      foodName: foodName.trim(),
+      calories: Number(calories) || 0,
+      protein: Number(protein) || 0,
+      carbs: Number(carbs) || 0,
+      fat: Number(fat) || 0,
+    });
+
+    router.replace("/dashboard");
   };
 
   return (
