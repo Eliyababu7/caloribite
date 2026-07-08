@@ -1,6 +1,9 @@
+import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-export default function HomeScreen() {
+export default function WelcomeScreen() {
+  const router = useRouter();
+
   return (
     <View style={styles.container}>
       <View style={styles.logoCircle}>
@@ -16,11 +19,17 @@ export default function HomeScreen() {
         app.
       </Text>
 
-      <Pressable style={styles.primaryButton}>
+      <Pressable
+        style={styles.primaryButton}
+        onPress={() => router.push("/signup")}
+      >
         <Text style={styles.primaryButtonText}>Get Started</Text>
       </Pressable>
 
-      <Pressable style={styles.secondaryButton}>
+      <Pressable
+        style={styles.secondaryButton}
+        onPress={() => router.push("/login")}
+      >
         <Text style={styles.secondaryButtonText}>
           I already have an account
         </Text>
