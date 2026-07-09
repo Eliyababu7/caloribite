@@ -16,11 +16,20 @@ export default function DashboardScreen() {
   } = useFoodLogs();
 
   const dailyCalorieTarget = 2000;
+  const proteinTarget = 120;
+  const carbsTarget = 220;
+  const fatTarget = 65;
+
   const remainingCalories = Math.max(dailyCalorieTarget - totalCalories, 0);
-  const progressPercentage = Math.min(
+  const calorieProgress = Math.min(
     Math.round((totalCalories / dailyCalorieTarget) * 100),
     100,
   );
+
+  const getProgress = (current: number, target: number) => {
+    if (target === 0) return 0;
+    return Math.min(Math.round((current / target) * 100), 100);
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -36,16 +45,13 @@ export default function DashboardScreen() {
           </View>
 
           <View style={styles.targetBadge}>
-            <Text style={styles.targetBadgeText}>{progressPercentage}%</Text>
+            <Text style={styles.targetBadgeText}>{calorieProgress}%</Text>
           </View>
         </View>
 
         <View style={styles.progressBarBackground}>
           <View
-            style={[
-              styles.progressBarFill,
-              { width: `${progressPercentage}%` },
-            ]}
+            style={[styles.progressBarFill, { width: `${calorieProgress}%` }]}
           />
         </View>
 
@@ -70,21 +76,29 @@ export default function DashboardScreen() {
         </Text>
       </View>
 
-      <View style={styles.row}>
-        <View style={styles.smallCard}>
-          <Text style={styles.smallLabel}>Protein</Text>
-          <Text style={styles.smallValue}>{totalProtein}g</Text>
-        </View>
+      <Text style={styles.sectionTitle}>Macro balance</Text>
 
-        <View style={styles.smallCard}>
-          <Text style={styles.smallLabel}>Carbs</Text>
-          <Text style={styles.smallValue}>{totalCarbs}g</Text>
-        </View>
+      <View style={styles.macroCard}>
+        <MacroProgress
+          label="Protein"
+          current={totalProtein}
+          target={proteinTarget}
+          progress={getProgress(totalProtein, proteinTarget)}
+        />
 
-        <View style={styles.smallCard}>
-          <Text style={styles.smallLabel}>Fat</Text>
-          <Text style={styles.smallValue}>{totalFat}g</Text>
-        </View>
+        <MacroProgress
+          label="Carbs"
+          current={totalCarbs}
+          target={carbsTarget}
+          progress={getProgress(totalCarbs, carbsTarget)}
+        />
+
+        <MacroProgress
+          label="Fat"
+          current={totalFat}
+          target={fatTarget}
+          progress={getProgress(totalFat, fatTarget)}
+        />
       </View>
 
       <Pressable
@@ -117,7 +131,8 @@ export default function DashboardScreen() {
             <View style={styles.foodInfo}>
               <Text style={styles.foodName}>{food.foodName}</Text>
               <Text style={styles.foodMacros}>
-                P {food.protein}g • C {food.carbs}g • F {food.fat}g
+                {food.mealType} • P {food.protein}g • C {food.carbs}g • F{" "}
+                {food.fat}g
               </Text>
             </View>
 
@@ -132,6 +147,35 @@ export default function DashboardScreen() {
         ))
       )}
     </ScrollView>
+  );
+}
+
+function MacroProgress({
+  label,
+  current,
+  target,
+  progress,
+}: {
+  label: string;
+  current: number;
+  target: number;
+  progress: number;
+}) {
+  return (
+    <View style={styles.macroItem}>
+      <View style={styles.macroTopRow}>
+        <Text style={styles.macroLabel}>{label}</Text>
+        <Text style={styles.macroValue}>
+          {current}g / {target}g
+        </Text>
+      </View>
+
+      <View style={styles.macroBarBackground}>
+        <View style={[styles.macroBarFill, { width: `${progress}%` }]} />
+      </View>
+
+      <Text style={styles.macroHint}>{progress}% of daily target</Text>
+    </View>
   );
 }
 
@@ -157,7 +201,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderRadius: 24,
     padding: 24,
-    marginBottom: 18,
+    marginBottom: 22,
     borderWidth: 1,
     borderColor: "#E6DCD6",
   },
@@ -220,28 +264,53 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#425756",
   },
-  row: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 28,
-  },
-  smallCard: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#E6DCD6",
-  },
-  smallLabel: {
-    fontSize: 14,
-    color: "#425756",
-    marginBottom: 8,
-  },
-  smallValue: {
+  sectionTitle: {
     fontSize: 22,
     fontWeight: "800",
     color: "#143D3C",
+    marginBottom: 14,
+  },
+  macroCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 28,
+    borderWidth: 1,
+    borderColor: "#E6DCD6",
+  },
+  macroItem: {
+    marginBottom: 18,
+  },
+  macroTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  macroLabel: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#143D3C",
+  },
+  macroValue: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#425756",
+  },
+  macroBarBackground: {
+    height: 10,
+    backgroundColor: "#F0E3DC",
+    borderRadius: 999,
+    overflow: "hidden",
+    marginBottom: 6,
+  },
+  macroBarFill: {
+    height: "100%",
+    backgroundColor: "#143D3C",
+    borderRadius: 999,
+  },
+  macroHint: {
+    fontSize: 13,
+    color: "#425756",
   },
   primaryButton: {
     backgroundColor: "#143D3C",
@@ -260,11 +329,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#143D3C",
   },
   clearText: {
     color: "#FF6B4A",
