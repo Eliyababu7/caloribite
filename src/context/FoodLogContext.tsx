@@ -8,6 +8,8 @@ import {
   useState,
 } from "react";
 
+export type MealType = "Breakfast" | "Lunch" | "Dinner" | "Snack";
+
 export type FoodLog = {
   id: string;
   foodName: string;
@@ -15,6 +17,7 @@ export type FoodLog = {
   protein: number;
   carbs: number;
   fat: number;
+  mealType: MealType;
   createdAt: string;
 };
 
