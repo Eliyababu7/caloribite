@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { MacroCard } from "../components/MacroCard";
 import { ProgressBar } from "../components/ProgressBar";
 import { useFoodLogs } from "../context/FoodLogContext";
+import { createNutritionSummary } from "../services/nutrition/nutritionService";
 import type { NutritionTargets } from "../types/nutrition";
 
 /**
@@ -18,14 +19,6 @@ const DEFAULT_NUTRITION_TARGETS: NutritionTargets = {
   carbs: 220,
   fat: 65,
 };
-
-function calculateProgress(current: number, target: number): number {
-  if (target <= 0) {
-    return 0;
-  }
-
-  return Math.min(Math.round((current / target) * 100), 100);
-}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -42,14 +35,14 @@ export default function DashboardScreen() {
 
   const nutritionTargets = DEFAULT_NUTRITION_TARGETS;
 
-  const remainingCalories = Math.max(
-    nutritionTargets.calories - totalCalories,
-    0,
-  );
-
-  const calorieProgress = calculateProgress(
-    totalCalories,
-    nutritionTargets.calories,
+  const nutritionSummary = createNutritionSummary(
+    {
+      calories: totalCalories,
+      protein: totalProtein,
+      carbs: totalCarbs,
+      fat: totalFat,
+    },
+    nutritionTargets,
   );
 
   return (
@@ -67,7 +60,9 @@ export default function DashboardScreen() {
           </View>
 
           <View style={styles.targetBadge}>
-            <Text style={styles.targetBadgeText}>{calorieProgress}%</Text>
+            <Text style={styles.targetBadgeText}>
+              {nutritionSummary.calorieProgress}%
+            </Text>
           </View>
         </View>
 
@@ -92,7 +87,9 @@ export default function DashboardScreen() {
           <View style={styles.remainingSummary}>
             <Text style={styles.summaryLabel}>Remaining</Text>
 
-            <Text style={styles.summaryValue}>{remainingCalories} kcal</Text>
+            <Text style={styles.summaryValue}>
+              {nutritionSummary.remainingCalories} kcal
+            </Text>
           </View>
         </View>
 
