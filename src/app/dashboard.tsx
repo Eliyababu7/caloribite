@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { MacroCard } from "../components/MacroCard";
 import { ProgressBar } from "../components/ProgressBar";
 import { useFoodLogs } from "../context/FoodLogContext";
 import type { NutritionTargets } from "../types/nutrition";
@@ -106,23 +107,22 @@ export default function DashboardScreen() {
 
       <Text style={styles.sectionTitle}>Macro balance</Text>
       <View style={styles.macroCard}>
-        <MacroProgress
+        <MacroCard
           label="Protein"
           current={totalProtein}
           target={nutritionTargets.protein}
         />
 
-        <MacroProgress
+        <MacroCard
           label="Carbs"
           current={totalCarbs}
           target={nutritionTargets.carbs}
         />
 
-        <MacroProgress
+        <MacroCard
           label="Fat"
           current={totalFat}
           target={nutritionTargets.fat}
-          isLast
         />
       </View>
 
@@ -183,38 +183,6 @@ type MacroProgressProps = {
   target: number;
   isLast?: boolean;
 };
-
-function MacroProgress({
-  label,
-  current,
-  target,
-  isLast = false,
-}: MacroProgressProps) {
-  const progress = calculateProgress(current, target);
-
-  return (
-    <View style={[styles.macroItem, isLast && styles.lastMacroItem]}>
-      <View style={styles.macroTopRow}>
-        <Text style={styles.macroLabel}>{label}</Text>
-
-        <Text style={styles.macroValue}>
-          {current}g / {target}g
-        </Text>
-      </View>
-
-      <ProgressBar
-        value={current}
-        max={target}
-        height={10}
-        trackColor="#F0E3DC"
-        fillColor="#143D3C"
-        style={styles.macroProgressBar}
-      />
-
-      <Text style={styles.macroHint}>{progress}% of daily target</Text>
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   container: {
