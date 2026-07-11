@@ -1,21 +1,45 @@
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, ViewStyle } from "react-native";
 
 type ProgressBarProps = {
   value: number;
   max: number;
   height?: number;
+  trackColor?: string;
+  fillColor?: string;
+  style?: ViewStyle;
 };
 
-export function ProgressBar({ value, max, height = 10 }: ProgressBarProps) {
-  const percentage = max > 0 ? Math.min(Math.max(value / max, 0), 1) * 100 : 0;
+export function ProgressBar({
+  value,
+  max,
+  height = 10,
+  trackColor = "#EADFD9",
+  fillColor = "#FF6B57",
+  style,
+}: ProgressBarProps) {
+  const safeValue = Math.max(value, 0);
+  const safeMax = Math.max(max, 0);
+
+  const percentage =
+    safeMax > 0 ? Math.min((safeValue / safeMax) * 100, 100) : 0;
 
   return (
-    <View style={[styles.track, { height }]}>
+    <View
+      style={[
+        styles.track,
+        {
+          height,
+          backgroundColor: trackColor,
+        },
+        style,
+      ]}
+    >
       <View
         style={[
-          styles.progress,
+          styles.fill,
           {
             width: `${percentage}%`,
+            backgroundColor: fillColor,
           },
         ]}
       />
@@ -28,11 +52,9 @@ const styles = StyleSheet.create({
     width: "100%",
     overflow: "hidden",
     borderRadius: 999,
-    backgroundColor: "#E5E7EB",
   },
-  progress: {
+  fill: {
     height: "100%",
     borderRadius: 999,
-    backgroundColor: "#0F766E",
   },
 });

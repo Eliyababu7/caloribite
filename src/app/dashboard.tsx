@@ -1,6 +1,30 @@
 import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+
+import { ProgressBar } from "../components/ProgressBar";
 import { useFoodLogs } from "../context/FoodLogContext";
+import type { NutritionTargets } from "../types/nutrition";
+
+/**
+ * Temporary default targets.
+ *
+ * Later, these values will come from the signed-in user's profile,
+ * activity level, weight goal, and nutrition calculation service.
+ */
+const DEFAULT_NUTRITION_TARGETS: NutritionTargets = {
+  calories: 2000,
+  protein: 120,
+  carbs: 220,
+  fat: 65,
+};
+
+function calculateProgress(current: number, target: number): number {
+  if (target <= 0) {
+    return 0;
+  }
+
+  return Math.min(Math.round((current / target) * 100), 100);
+}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -15,21 +39,17 @@ export default function DashboardScreen() {
     clearFoodLogs,
   } = useFoodLogs();
 
-  const dailyCalorieTarget = 2000;
-  const proteinTarget = 120;
-  const carbsTarget = 220;
-  const fatTarget = 65;
+  const nutritionTargets = DEFAULT_NUTRITION_TARGETS;
 
-  const remainingCalories = Math.max(dailyCalorieTarget - totalCalories, 0);
-  const calorieProgress = Math.min(
-    Math.round((totalCalories / dailyCalorieTarget) * 100),
-    100,
+  const remainingCalories = Math.max(
+    nutritionTargets.calories - totalCalories,
+    0,
   );
 
-  const getProgress = (current: number, target: number) => {
-    if (target === 0) return 0;
-    return Math.min(Math.round((current / target) * 100), 100);
-  };
+  const calorieProgress = calculateProgress(
+    totalCalories,
+    nutritionTargets.calories,
+  );
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -41,6 +61,7 @@ export default function DashboardScreen() {
         <View style={styles.cardTopRow}>
           <View>
             <Text style={styles.cardLabel}>Calories consumed</Text>
+
             <Text style={styles.calorieNumber}>{totalCalories} kcal</Text>
           </View>
 
@@ -49,20 +70,27 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        <View style={styles.progressBarBackground}>
-          <View
-            style={[styles.progressBarFill, { width: `${calorieProgress}%` }]}
-          />
-        </View>
+        <ProgressBar
+          value={totalCalories}
+          max={nutritionTargets.calories}
+          height={12}
+          trackColor="#F0E3DC"
+          fillColor="#FF6B4A"
+          style={styles.calorieProgressBar}
+        />
 
         <View style={styles.calorieSummaryRow}>
           <View>
             <Text style={styles.summaryLabel}>Target</Text>
-            <Text style={styles.summaryValue}>{dailyCalorieTarget} kcal</Text>
+
+            <Text style={styles.summaryValue}>
+              {nutritionTargets.calories} kcal
+            </Text>
           </View>
 
-          <View>
+          <View style={styles.remainingSummary}>
             <Text style={styles.summaryLabel}>Remaining</Text>
+
             <Text style={styles.summaryValue}>{remainingCalories} kcal</Text>
           </View>
         </View>
@@ -71,33 +99,30 @@ export default function DashboardScreen() {
           {foodLogs.length === 0
             ? "Your daily tracking will appear here."
             : `${foodLogs.length} food item${
-                foodLogs.length > 1 ? "s" : ""
+                foodLogs.length === 1 ? "" : "s"
               } logged today.`}
         </Text>
       </View>
 
       <Text style={styles.sectionTitle}>Macro balance</Text>
-
       <View style={styles.macroCard}>
         <MacroProgress
           label="Protein"
           current={totalProtein}
-          target={proteinTarget}
-          progress={getProgress(totalProtein, proteinTarget)}
+          target={nutritionTargets.protein}
         />
 
         <MacroProgress
           label="Carbs"
           current={totalCarbs}
-          target={carbsTarget}
-          progress={getProgress(totalCarbs, carbsTarget)}
+          target={nutritionTargets.carbs}
         />
 
         <MacroProgress
           label="Fat"
           current={totalFat}
-          target={fatTarget}
-          progress={getProgress(totalFat, fatTarget)}
+          target={nutritionTargets.fat}
+          isLast
         />
       </View>
 
@@ -121,6 +146,7 @@ export default function DashboardScreen() {
       {foodLogs.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>No food logged yet</Text>
+
           <Text style={styles.emptyText}>
             Add your first meal to start tracking your calories.
           </Text>
@@ -130,6 +156,7 @@ export default function DashboardScreen() {
           <View key={food.id} style={styles.foodCard}>
             <View style={styles.foodInfo}>
               <Text style={styles.foodName}>{food.foodName}</Text>
+
               <Text style={styles.foodMacros}>
                 {food.mealType} • P {food.protein}g • C {food.carbs}g • F{" "}
                 {food.fat}g
@@ -150,29 +177,39 @@ export default function DashboardScreen() {
   );
 }
 
+type MacroProgressProps = {
+  label: string;
+  current: number;
+  target: number;
+  isLast?: boolean;
+};
+
 function MacroProgress({
   label,
   current,
   target,
-  progress,
-}: {
-  label: string;
-  current: number;
-  target: number;
-  progress: number;
-}) {
+  isLast = false,
+}: MacroProgressProps) {
+  const progress = calculateProgress(current, target);
+
   return (
-    <View style={styles.macroItem}>
+    <View style={[styles.macroItem, isLast && styles.lastMacroItem]}>
       <View style={styles.macroTopRow}>
         <Text style={styles.macroLabel}>{label}</Text>
+
         <Text style={styles.macroValue}>
           {current}g / {target}g
         </Text>
       </View>
 
-      <View style={styles.macroBarBackground}>
-        <View style={[styles.macroBarFill, { width: `${progress}%` }]} />
-      </View>
+      <ProgressBar
+        value={current}
+        max={target}
+        height={10}
+        trackColor="#F0E3DC"
+        fillColor="#143D3C"
+        style={styles.macroProgressBar}
+      />
 
       <Text style={styles.macroHint}>{progress}% of daily target</Text>
     </View>
@@ -186,17 +223,20 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 70,
   },
+
   greeting: {
     fontSize: 18,
     color: "#425756",
     marginBottom: 8,
   },
+
   title: {
     fontSize: 34,
     fontWeight: "800",
     color: "#143D3C",
     marginBottom: 24,
   },
+
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 24,
@@ -205,71 +245,78 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E6DCD6",
   },
+
   cardTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: 12,
   },
+
   cardLabel: {
     fontSize: 16,
     color: "#425756",
     marginBottom: 10,
   },
+
   calorieNumber: {
     fontSize: 42,
     fontWeight: "800",
     color: "#FF6B4A",
     marginBottom: 18,
   },
+
   targetBadge: {
     backgroundColor: "#FFF0E9",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
   },
+
   targetBadgeText: {
     color: "#FF6B4A",
     fontSize: 15,
     fontWeight: "800",
   },
-  progressBarBackground: {
-    height: 12,
-    backgroundColor: "#F0E3DC",
-    borderRadius: 999,
-    overflow: "hidden",
+
+  calorieProgressBar: {
     marginBottom: 18,
   },
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: "#FF6B4A",
-    borderRadius: 999,
-  },
+
   calorieSummaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 14,
   },
+
+  remainingSummary: {
+    alignItems: "flex-end",
+  },
+
   summaryLabel: {
     fontSize: 13,
     color: "#425756",
     marginBottom: 4,
   },
+
   summaryValue: {
     fontSize: 16,
     fontWeight: "800",
     color: "#143D3C",
   },
+
   cardSubText: {
     fontSize: 15,
     color: "#425756",
   },
+
   sectionTitle: {
     fontSize: 22,
     fontWeight: "800",
     color: "#143D3C",
     marginBottom: 14,
   },
+
   macroCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 24,
@@ -278,40 +325,42 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E6DCD6",
   },
+
   macroItem: {
     marginBottom: 18,
   },
+
+  lastMacroItem: {
+    marginBottom: 0,
+  },
+
   macroTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 8,
   },
+
   macroLabel: {
     fontSize: 16,
     fontWeight: "800",
     color: "#143D3C",
   },
+
   macroValue: {
     fontSize: 15,
     fontWeight: "700",
     color: "#425756",
   },
-  macroBarBackground: {
-    height: 10,
-    backgroundColor: "#F0E3DC",
-    borderRadius: 999,
-    overflow: "hidden",
+
+  macroProgressBar: {
     marginBottom: 6,
   },
-  macroBarFill: {
-    height: "100%",
-    backgroundColor: "#143D3C",
-    borderRadius: 999,
-  },
+
   macroHint: {
     fontSize: 13,
     color: "#425756",
   },
+
   primaryButton: {
     backgroundColor: "#143D3C",
     paddingVertical: 16,
@@ -319,22 +368,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 30,
   },
+
   primaryButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "700",
   },
+
   sectionHeader: {
     marginBottom: 14,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
+
   clearText: {
     color: "#FF6B4A",
     fontSize: 15,
     fontWeight: "800",
   },
+
   emptyCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
@@ -342,17 +395,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E6DCD6",
   },
+
   emptyTitle: {
     fontSize: 17,
     fontWeight: "800",
     color: "#143D3C",
     marginBottom: 6,
   },
+
   emptyText: {
     fontSize: 15,
     color: "#425756",
     lineHeight: 22,
   },
+
   foodCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
@@ -365,27 +421,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+
   foodInfo: {
     flex: 1,
   },
+
   foodName: {
     fontSize: 17,
     fontWeight: "800",
     color: "#143D3C",
     marginBottom: 6,
   },
+
   foodMacros: {
     fontSize: 14,
     color: "#425756",
   },
+
   foodRight: {
     alignItems: "flex-end",
   },
+
   foodCalories: {
     fontSize: 16,
     fontWeight: "800",
     color: "#FF6B4A",
   },
+
   deleteText: {
     color: "#C0392B",
     fontSize: 13,
