@@ -8,9 +8,43 @@ import {
   useState,
 } from "react";
 
-import type { FoodLog, NewFoodLog } from "../types/food";
+import type { FoodLog, MealType, NewFoodLog } from "../types/food";
 
 export type { FoodLog, MealType } from "../types/food";
+
+const MEAL_TYPES: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
+
+function isMealType(value: unknown): value is MealType {
+  return MEAL_TYPES.includes(value as MealType);
+}
+
+function inferMealType(createdAt: unknown): MealType {
+  if (typeof createdAt !== "string") {
+    return "Snack";
+  }
+
+  const createdDate = new Date(createdAt);
+
+  if (Number.isNaN(createdDate.getTime())) {
+    return "Snack";
+  }
+
+  const hour = createdDate.getHours();
+
+  if (hour < 11) {
+    return "Breakfast";
+  }
+
+  if (hour < 15) {
+    return "Lunch";
+  }
+
+  if (hour < 21) {
+    return "Dinner";
+  }
+
+  return "Snack";
+}
 
 type FoodLogContextType = {
   foodLogs: FoodLog[];
@@ -37,7 +71,25 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
         const savedFoodLogs = await AsyncStorage.getItem(STORAGE_KEY);
 
         if (savedFoodLogs) {
-          setFoodLogs(JSON.parse(savedFoodLogs));
+          const parsedFoodLogs: unknown = JSON.parse(savedFoodLogs);
+
+          if (!Array.isArray(parsedFoodLogs)) {
+            setFoodLogs([]);
+            return;
+          }
+
+          const migratedFoodLogs = parsedFoodLogs.map((storedFood) => {
+            const food = storedFood as FoodLog;
+
+            return {
+              ...food,
+              mealType: isMealType(food.mealType)
+                ? food.mealType
+                : inferMealType(food.createdAt),
+            };
+          });
+
+          setFoodLogs(migratedFoodLogs);
         }
       } catch (error) {
         console.log("Failed to load food logs:", error);

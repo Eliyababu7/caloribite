@@ -1,12 +1,17 @@
 import { useRouter } from "expo-router";
+import { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { FoodCard } from "../components/FoodCard";
 import { MacroCard } from "../components/MacroCard";
+import { MealSection } from "../components/MealSection";
 import { ProgressBar } from "../components/ProgressBar";
 import { useFoodLogs } from "../context/FoodLogContext";
 import { createNutritionSummary } from "../services/nutrition/nutritionService";
+import type { FoodLog, MealType } from "../types/food";
 import type { NutritionTargets } from "../types/nutrition";
+
+const MEAL_TYPES: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
+
 /**
  * Temporary default targets.
  *
@@ -32,6 +37,25 @@ export default function DashboardScreen() {
     deleteFoodLog,
     clearFoodLogs,
   } = useFoodLogs();
+
+  const foodsByMeal = useMemo(() => {
+    const groupedFoods: Record<MealType, FoodLog[]> = {
+      Breakfast: [],
+      Lunch: [],
+      Dinner: [],
+      Snack: [],
+    };
+
+    foodLogs.forEach((food) => {
+      const mealType = MEAL_TYPES.includes(food.mealType)
+        ? food.mealType
+        : "Snack";
+
+      groupedFoods[mealType].push(food);
+    });
+
+    return groupedFoods;
+  }, [foodLogs]);
 
   const nutritionTargets = DEFAULT_NUTRITION_TARGETS;
 
@@ -103,6 +127,7 @@ export default function DashboardScreen() {
       </View>
 
       <Text style={styles.sectionTitle}>Macro balance</Text>
+
       <View style={styles.macroCard}>
         <MacroCard
           label="Protein"
@@ -149,11 +174,12 @@ export default function DashboardScreen() {
           </Text>
         </View>
       ) : (
-        foodLogs.map((food) => (
-          <FoodCard
-            key={food.id}
-            food={food}
-            onDelete={() => deleteFoodLog(food.id)}
+        MEAL_TYPES.map((mealType) => (
+          <MealSection
+            key={mealType}
+            mealType={mealType}
+            foods={foodsByMeal[mealType]}
+            onDeleteFood={deleteFoodLog}
           />
         ))
       )}
