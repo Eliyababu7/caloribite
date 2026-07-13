@@ -1,12 +1,12 @@
 import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { FoodCard } from "../components/FoodCard";
 import { MacroCard } from "../components/MacroCard";
 import { ProgressBar } from "../components/ProgressBar";
 import { useFoodLogs } from "../context/FoodLogContext";
 import { createNutritionSummary } from "../services/nutrition/nutritionService";
 import type { NutritionTargets } from "../types/nutrition";
-
 /**
  * Temporary default targets.
  *
@@ -150,36 +150,16 @@ export default function DashboardScreen() {
         </View>
       ) : (
         foodLogs.map((food) => (
-          <View key={food.id} style={styles.foodCard}>
-            <View style={styles.foodInfo}>
-              <Text style={styles.foodName}>{food.foodName}</Text>
-
-              <Text style={styles.foodMacros}>
-                {food.mealType} • P {food.protein}g • C {food.carbs}g • F{" "}
-                {food.fat}g
-              </Text>
-            </View>
-
-            <View style={styles.foodRight}>
-              <Text style={styles.foodCalories}>{food.calories} kcal</Text>
-
-              <Pressable onPress={() => deleteFoodLog(food.id)}>
-                <Text style={styles.deleteText}>Delete</Text>
-              </Pressable>
-            </View>
-          </View>
+          <FoodCard
+            key={food.id}
+            food={food}
+            onDelete={() => deleteFoodLog(food.id)}
+          />
         ))
       )}
     </ScrollView>
   );
 }
-
-type MacroProgressProps = {
-  label: string;
-  current: number;
-  target: number;
-  isLast?: boolean;
-};
 
 const styles = StyleSheet.create({
   container: {
@@ -291,41 +271,6 @@ const styles = StyleSheet.create({
     borderColor: "#E6DCD6",
   },
 
-  macroItem: {
-    marginBottom: 18,
-  },
-
-  lastMacroItem: {
-    marginBottom: 0,
-  },
-
-  macroTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-
-  macroLabel: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#143D3C",
-  },
-
-  macroValue: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#425756",
-  },
-
-  macroProgressBar: {
-    marginBottom: 6,
-  },
-
-  macroHint: {
-    fontSize: 13,
-    color: "#425756",
-  },
-
   primaryButton: {
     backgroundColor: "#143D3C",
     paddingVertical: 16,
@@ -372,51 +317,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#425756",
     lineHeight: 22,
-  },
-
-  foodCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#E6DCD6",
-    marginBottom: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-  },
-
-  foodInfo: {
-    flex: 1,
-  },
-
-  foodName: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: "#143D3C",
-    marginBottom: 6,
-  },
-
-  foodMacros: {
-    fontSize: 14,
-    color: "#425756",
-  },
-
-  foodRight: {
-    alignItems: "flex-end",
-  },
-
-  foodCalories: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#FF6B4A",
-  },
-
-  deleteText: {
-    color: "#C0392B",
-    fontSize: 13,
-    fontWeight: "700",
-    marginTop: 6,
   },
 });
