@@ -8,22 +8,13 @@ import {
   useState,
 } from "react";
 
-export type MealType = "Breakfast" | "Lunch" | "Dinner" | "Snack";
+import type { FoodLog, NewFoodLog } from "../types/food";
 
-export type FoodLog = {
-  id: string;
-  foodName: string;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  mealType: MealType;
-  createdAt: string;
-};
+export type { FoodLog, MealType } from "../types/food";
 
 type FoodLogContextType = {
   foodLogs: FoodLog[];
-  addFoodLog: (foodLog: Omit<FoodLog, "id" | "createdAt">) => void;
+  addFoodLog: (foodLog: NewFoodLog) => void;
   deleteFoodLog: (id: string) => void;
   clearFoodLogs: () => void;
   totalCalories: number;
@@ -72,7 +63,7 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
     }
   }, [foodLogs, hasLoadedStorage]);
 
-  const addFoodLog = (foodLog: Omit<FoodLog, "id" | "createdAt">) => {
+  const addFoodLog = (foodLog: NewFoodLog) => {
     const newFoodLog: FoodLog = {
       id: Date.now().toString(),
       createdAt: new Date().toISOString(),
