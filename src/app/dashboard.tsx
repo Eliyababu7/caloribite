@@ -1,7 +1,8 @@
 import { useRouter } from "expo-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { DateNavigator } from "../components/DateNavigator";
 import { MacroCard } from "../components/MacroCard";
 import { MealSection } from "../components/MealSection";
 import { ProgressBar } from "../components/ProgressBar";
@@ -12,16 +13,10 @@ import {
 } from "../services/nutrition/nutritionService";
 import type { FoodLog, MealType } from "../types/food";
 import type { NutritionTargets } from "../types/nutrition";
-import { getLocalDateKey } from "../utils/date";
+import { addDaysToDateKey, getLocalDateKey } from "../utils/date";
 
 const MEAL_TYPES: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
-/**
- * Temporary default targets.
- *
- * Later, these values will come from the signed-in user's profile,
- * activity level, weight goal, and nutrition calculation service.
- */
 const DEFAULT_NUTRITION_TARGETS: NutritionTargets = {
   calories: 2000,
   protein: 120,
@@ -36,9 +31,13 @@ export default function DashboardScreen() {
 
   const todayDateKey = getLocalDateKey();
 
-  const todayFoodLogs = useMemo(
-    () => foodLogs.filter((food) => food.loggedDate === todayDateKey),
-    [foodLogs, todayDateKey],
+  const [selectedDateKey, setSelectedDateKey] = useState(todayDateKey);
+
+  const isViewingToday = selectedDateKey === todayDateKey;
+
+  const selectedFoodLogs = useMemo(
+    () => foodLogs.filter((food) => food.loggedDate === selectedDateKey),
+    [foodLogs, selectedDateKey],
   );
 
   const foodsByMeal = useMemo(() => {
@@ -49,7 +48,7 @@ export default function DashboardScreen() {
       Snack: [],
     };
 
-    todayFoodLogs.forEach((food) => {
+    selectedFoodLogs.forEach((food) => {
       const mealType = MEAL_TYPES.includes(food.mealType)
         ? food.mealType
         : "Snack";
@@ -58,11 +57,11 @@ export default function DashboardScreen() {
     });
 
     return groupedFoods;
-  }, [todayFoodLogs]);
+  }, [selectedFoodLogs]);
 
   const nutritionTotals = useMemo(
-    () => calculateNutritionTotals(todayFoodLogs),
-    [todayFoodLogs],
+    () => calculateNutritionTotals(selectedFoodLogs),
+    [selectedFoodLogs],
   );
 
   const nutritionTargets = DEFAULT_NUTRITION_TARGETS;
@@ -72,11 +71,48 @@ export default function DashboardScreen() {
     nutritionTargets,
   );
 
+  const handlePreviousDate = () => {
+    setSelectedDateKey((currentDateKey) => {
+      return addDaysToDateKey(currentDateKey, -1) ?? currentDateKey;
+    });
+  };
+
+  const handleNextDate = () => {
+    setSelectedDateKey((currentDateKey) => {
+      const nextDateKey = addDaysToDateKey(currentDateKey, 1);
+
+      if (!nextDateKey || nextDateKey > todayDateKey) {
+        return currentDateKey;
+      }
+
+      return nextDateKey;
+    });
+  };
+
+  const handleGoToToday = () => {
+    setSelectedDateKey(todayDateKey);
+  };
+
+  const handleAddFood = () => {
+    setSelectedDateKey(todayDateKey);
+    router.push("/add-food");
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.greeting}>Hello, Eliya 👋</Text>
 
-      <Text style={styles.title}>Today’s progress</Text>
+      <Text style={styles.title}>
+        {isViewingToday ? "Today’s progress" : "Daily progress"}
+      </Text>
+
+      <DateNavigator
+        selectedDateKey={selectedDateKey}
+        todayDateKey={todayDateKey}
+        onPrevious={handlePreviousDate}
+        onNext={handleNextDate}
+        onToday={handleGoToToday}
+      />
 
       <View style={styles.card}>
         <View style={styles.cardTopRow}>
@@ -123,11 +159,11 @@ export default function DashboardScreen() {
         </View>
 
         <Text style={styles.cardSubText}>
-          {todayFoodLogs.length === 0
-            ? "Your daily tracking will appear here."
-            : `${todayFoodLogs.length} food item${
-                todayFoodLogs.length === 1 ? "" : "s"
-              } logged today.`}
+          {selectedFoodLogs.length === 0
+            ? "No food was logged for this day."
+            : `${selectedFoodLogs.length} food item${
+                selectedFoodLogs.length === 1 ? "" : "s"
+              } logged ${isViewingToday ? "today" : "on this day"}.`}
         </Text>
       </View>
 
@@ -153,29 +189,30 @@ export default function DashboardScreen() {
         />
       </View>
 
-      <Pressable
-        style={styles.primaryButton}
-        onPress={() => router.push("/add-food")}
-      >
-        <Text style={styles.primaryButtonText}>Add food</Text>
+      <Pressable style={styles.primaryButton} onPress={handleAddFood}>
+        <Text style={styles.primaryButtonText}>
+          {isViewingToday ? "Add food" : "Add food for today"}
+        </Text>
       </Pressable>
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Today’s food</Text>
+        <Text style={styles.sectionTitle}>
+          {isViewingToday ? "Today’s food" : "Food diary"}
+        </Text>
 
-        {todayFoodLogs.length > 0 && (
-          <Pressable onPress={() => clearFoodLogsForDate(todayDateKey)}>
-            <Text style={styles.clearText}>Clear all</Text>
+        {selectedFoodLogs.length > 0 && (
+          <Pressable onPress={() => clearFoodLogsForDate(selectedDateKey)}>
+            <Text style={styles.clearText}>Clear day</Text>
           </Pressable>
         )}
       </View>
 
-      {todayFoodLogs.length === 0 ? (
+      {selectedFoodLogs.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No food logged yet</Text>
+          <Text style={styles.emptyTitle}>No food logged</Text>
 
           <Text style={styles.emptyText}>
-            Add your first meal to start tracking your calories.
+            No food entries were recorded for this date.
           </Text>
         </View>
       ) : (
@@ -191,7 +228,6 @@ export default function DashboardScreen() {
     </ScrollView>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
