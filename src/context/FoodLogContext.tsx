@@ -8,13 +8,17 @@ import {
 } from "react";
 
 import type { FoodLog, MealType, NewFoodLog } from "../types/food";
-import { getLocalDateKey, getLocalDateKeyFromIso } from "../utils/date";
+import {
+  getLocalDateKey,
+  getLocalDateKeyFromIso,
+  parseLocalDateKey,
+} from "../utils/date";
 
 export type { FoodLog, MealType } from "../types/food";
 
 type FoodLogContextType = {
   foodLogs: FoodLog[];
-  addFoodLog: (foodLog: NewFoodLog) => void;
+  addFoodLog: (foodLog: NewFoodLog, loggedDate?: string) => void;
   deleteFoodLog: (id: string) => void;
   clearFoodLogsForDate: (loggedDate: string) => void;
 };
@@ -22,8 +26,6 @@ type FoodLogContextType = {
 const STORAGE_KEY = "caloribite_food_logs";
 
 const MEAL_TYPES: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
-
-const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const FoodLogContext = createContext<FoodLogContextType | undefined>(undefined);
 
@@ -82,11 +84,17 @@ function migrateStoredFoodLog(storedFood: unknown): FoodLog | null {
     ? food.mealType
     : inferMealType(food.createdAt);
 
+  const todayDateKey = getLocalDateKey();
+
+  const storedLoggedDate =
+    typeof food.loggedDate === "string" ? food.loggedDate : null;
+
   const loggedDate =
-    typeof food.loggedDate === "string" &&
-    DATE_KEY_PATTERN.test(food.loggedDate)
-      ? food.loggedDate
-      : (getLocalDateKeyFromIso(food.createdAt) ?? getLocalDateKey());
+    storedLoggedDate !== null &&
+    parseLocalDateKey(storedLoggedDate) !== null &&
+    storedLoggedDate <= todayDateKey
+      ? storedLoggedDate
+      : (getLocalDateKeyFromIso(food.createdAt) ?? todayDateKey);
 
   return {
     id: food.id,
@@ -145,13 +153,19 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
     }
   }, [foodLogs, hasLoadedStorage]);
 
-  const addFoodLog = (foodLog: NewFoodLog) => {
+  const addFoodLog = (foodLog: NewFoodLog, requestedLoggedDate?: string) => {
     const now = new Date();
+    const todayDateKey = getLocalDateKey(now);
+
+    const canUseRequestedDate =
+      requestedLoggedDate !== undefined &&
+      parseLocalDateKey(requestedLoggedDate) !== null &&
+      requestedLoggedDate <= todayDateKey;
 
     const newFoodLog: FoodLog = {
       id: Date.now().toString(),
       createdAt: now.toISOString(),
-      loggedDate: getLocalDateKey(now),
+      loggedDate: canUseRequestedDate ? requestedLoggedDate : todayDateKey,
       ...foodLog,
     };
 
