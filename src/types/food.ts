@@ -9,6 +9,7 @@ export type FoodLog = {
   fat: number;
   mealType: MealType;
   createdAt: string;
+  loggedDate: string;
 };
 
-export type NewFoodLog = Omit<FoodLog, "id" | "createdAt">;
+export type NewFoodLog = Omit<FoodLog, "id" | "createdAt" | "loggedDate">;

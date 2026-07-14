@@ -1,3 +1,4 @@
+import type { FoodLog } from "../../types/food";
 import type { NutritionTotals } from "../../types/nutrition";
 
 export type NutritionSummary = {
@@ -9,6 +10,27 @@ export type NutritionSummary = {
   carbsProgress: number;
   fatProgress: number;
 };
+
+export function calculateNutritionTotals(
+  foodLogs: readonly FoodLog[],
+): NutritionTotals {
+  return foodLogs.reduce<NutritionTotals>(
+    (totals, food) => {
+      return {
+        calories: totals.calories + food.calories,
+        protein: totals.protein + food.protein,
+        carbs: totals.carbs + food.carbs,
+        fat: totals.fat + food.fat,
+      };
+    },
+    {
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+    },
+  );
+}
 
 export function calculateProgress(current: number, target: number): number {
   if (target <= 0) {

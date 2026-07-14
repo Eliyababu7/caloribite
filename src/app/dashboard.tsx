@@ -6,9 +6,13 @@ import { MacroCard } from "../components/MacroCard";
 import { MealSection } from "../components/MealSection";
 import { ProgressBar } from "../components/ProgressBar";
 import { useFoodLogs } from "../context/FoodLogContext";
-import { createNutritionSummary } from "../services/nutrition/nutritionService";
+import {
+  calculateNutritionTotals,
+  createNutritionSummary,
+} from "../services/nutrition/nutritionService";
 import type { FoodLog, MealType } from "../types/food";
 import type { NutritionTargets } from "../types/nutrition";
+import { getLocalDateKey } from "../utils/date";
 
 const MEAL_TYPES: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
@@ -28,15 +32,14 @@ const DEFAULT_NUTRITION_TARGETS: NutritionTargets = {
 export default function DashboardScreen() {
   const router = useRouter();
 
-  const {
-    foodLogs,
-    totalCalories,
-    totalProtein,
-    totalCarbs,
-    totalFat,
-    deleteFoodLog,
-    clearFoodLogs,
-  } = useFoodLogs();
+  const { foodLogs, deleteFoodLog, clearFoodLogsForDate } = useFoodLogs();
+
+  const todayDateKey = getLocalDateKey();
+
+  const todayFoodLogs = useMemo(
+    () => foodLogs.filter((food) => food.loggedDate === todayDateKey),
+    [foodLogs, todayDateKey],
+  );
 
   const foodsByMeal = useMemo(() => {
     const groupedFoods: Record<MealType, FoodLog[]> = {
@@ -46,7 +49,7 @@ export default function DashboardScreen() {
       Snack: [],
     };
 
-    foodLogs.forEach((food) => {
+    todayFoodLogs.forEach((food) => {
       const mealType = MEAL_TYPES.includes(food.mealType)
         ? food.mealType
         : "Snack";
@@ -55,17 +58,17 @@ export default function DashboardScreen() {
     });
 
     return groupedFoods;
-  }, [foodLogs]);
+  }, [todayFoodLogs]);
+
+  const nutritionTotals = useMemo(
+    () => calculateNutritionTotals(todayFoodLogs),
+    [todayFoodLogs],
+  );
 
   const nutritionTargets = DEFAULT_NUTRITION_TARGETS;
 
   const nutritionSummary = createNutritionSummary(
-    {
-      calories: totalCalories,
-      protein: totalProtein,
-      carbs: totalCarbs,
-      fat: totalFat,
-    },
+    nutritionTotals,
     nutritionTargets,
   );
 
@@ -80,7 +83,9 @@ export default function DashboardScreen() {
           <View>
             <Text style={styles.cardLabel}>Calories consumed</Text>
 
-            <Text style={styles.calorieNumber}>{totalCalories} kcal</Text>
+            <Text style={styles.calorieNumber}>
+              {nutritionTotals.calories} kcal
+            </Text>
           </View>
 
           <View style={styles.targetBadge}>
@@ -91,7 +96,7 @@ export default function DashboardScreen() {
         </View>
 
         <ProgressBar
-          value={totalCalories}
+          value={nutritionTotals.calories}
           max={nutritionTargets.calories}
           height={12}
           trackColor="#F0E3DC"
@@ -118,10 +123,10 @@ export default function DashboardScreen() {
         </View>
 
         <Text style={styles.cardSubText}>
-          {foodLogs.length === 0
+          {todayFoodLogs.length === 0
             ? "Your daily tracking will appear here."
-            : `${foodLogs.length} food item${
-                foodLogs.length === 1 ? "" : "s"
+            : `${todayFoodLogs.length} food item${
+                todayFoodLogs.length === 1 ? "" : "s"
               } logged today.`}
         </Text>
       </View>
@@ -131,19 +136,19 @@ export default function DashboardScreen() {
       <View style={styles.macroCard}>
         <MacroCard
           label="Protein"
-          current={totalProtein}
+          current={nutritionTotals.protein}
           target={nutritionTargets.protein}
         />
 
         <MacroCard
           label="Carbs"
-          current={totalCarbs}
+          current={nutritionTotals.carbs}
           target={nutritionTargets.carbs}
         />
 
         <MacroCard
           label="Fat"
-          current={totalFat}
+          current={nutritionTotals.fat}
           target={nutritionTargets.fat}
         />
       </View>
@@ -158,14 +163,14 @@ export default function DashboardScreen() {
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Today’s food</Text>
 
-        {foodLogs.length > 0 && (
-          <Pressable onPress={clearFoodLogs}>
+        {todayFoodLogs.length > 0 && (
+          <Pressable onPress={() => clearFoodLogsForDate(todayDateKey)}>
             <Text style={styles.clearText}>Clear all</Text>
           </Pressable>
         )}
       </View>
 
-      {foodLogs.length === 0 ? (
+      {todayFoodLogs.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>No food logged yet</Text>
 

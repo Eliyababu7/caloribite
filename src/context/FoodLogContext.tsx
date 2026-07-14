@@ -4,25 +4,38 @@ import {
   ReactNode,
   useContext,
   useEffect,
-  useMemo,
   useState,
 } from "react";
 
 import type { FoodLog, MealType, NewFoodLog } from "../types/food";
+import { getLocalDateKey, getLocalDateKeyFromIso } from "../utils/date";
 
 export type { FoodLog, MealType } from "../types/food";
 
+type FoodLogContextType = {
+  foodLogs: FoodLog[];
+  addFoodLog: (foodLog: NewFoodLog) => void;
+  deleteFoodLog: (id: string) => void;
+  clearFoodLogsForDate: (loggedDate: string) => void;
+};
+
+const STORAGE_KEY = "caloribite_food_logs";
+
 const MEAL_TYPES: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
+
+const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const FoodLogContext = createContext<FoodLogContextType | undefined>(undefined);
 
 function isMealType(value: unknown): value is MealType {
   return MEAL_TYPES.includes(value as MealType);
 }
 
-function inferMealType(createdAt: unknown): MealType {
-  if (typeof createdAt !== "string") {
-    return "Snack";
-  }
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
 
+function inferMealType(createdAt: string): MealType {
   const createdDate = new Date(createdAt);
 
   if (Number.isNaN(createdDate.getTime())) {
@@ -46,20 +59,47 @@ function inferMealType(createdAt: unknown): MealType {
   return "Snack";
 }
 
-type FoodLogContextType = {
-  foodLogs: FoodLog[];
-  addFoodLog: (foodLog: NewFoodLog) => void;
-  deleteFoodLog: (id: string) => void;
-  clearFoodLogs: () => void;
-  totalCalories: number;
-  totalProtein: number;
-  totalCarbs: number;
-  totalFat: number;
-};
+function migrateStoredFoodLog(storedFood: unknown): FoodLog | null {
+  if (typeof storedFood !== "object" || storedFood === null) {
+    return null;
+  }
 
-const STORAGE_KEY = "caloribite_food_logs";
+  const food = storedFood as Record<string, unknown>;
 
-const FoodLogContext = createContext<FoodLogContextType | undefined>(undefined);
+  if (
+    typeof food.id !== "string" ||
+    typeof food.foodName !== "string" ||
+    typeof food.createdAt !== "string" ||
+    !isFiniteNumber(food.calories) ||
+    !isFiniteNumber(food.protein) ||
+    !isFiniteNumber(food.carbs) ||
+    !isFiniteNumber(food.fat)
+  ) {
+    return null;
+  }
+
+  const mealType = isMealType(food.mealType)
+    ? food.mealType
+    : inferMealType(food.createdAt);
+
+  const loggedDate =
+    typeof food.loggedDate === "string" &&
+    DATE_KEY_PATTERN.test(food.loggedDate)
+      ? food.loggedDate
+      : (getLocalDateKeyFromIso(food.createdAt) ?? getLocalDateKey());
+
+  return {
+    id: food.id,
+    foodName: food.foodName,
+    calories: food.calories,
+    protein: food.protein,
+    carbs: food.carbs,
+    fat: food.fat,
+    mealType,
+    createdAt: food.createdAt,
+    loggedDate,
+  };
+}
 
 export function FoodLogProvider({ children }: { children: ReactNode }) {
   const [foodLogs, setFoodLogs] = useState<FoodLog[]>([]);
@@ -73,23 +113,13 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
         if (savedFoodLogs) {
           const parsedFoodLogs: unknown = JSON.parse(savedFoodLogs);
 
-          if (!Array.isArray(parsedFoodLogs)) {
-            setFoodLogs([]);
-            return;
+          if (Array.isArray(parsedFoodLogs)) {
+            const migratedFoodLogs = parsedFoodLogs
+              .map(migrateStoredFoodLog)
+              .filter((food): food is FoodLog => food !== null);
+
+            setFoodLogs(migratedFoodLogs);
           }
-
-          const migratedFoodLogs = parsedFoodLogs.map((storedFood) => {
-            const food = storedFood as FoodLog;
-
-            return {
-              ...food,
-              mealType: isMealType(food.mealType)
-                ? food.mealType
-                : inferMealType(food.createdAt),
-            };
-          });
-
-          setFoodLogs(migratedFoodLogs);
         }
       } catch (error) {
         console.log("Failed to load food logs:", error);
@@ -116,9 +146,12 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
   }, [foodLogs, hasLoadedStorage]);
 
   const addFoodLog = (foodLog: NewFoodLog) => {
+    const now = new Date();
+
     const newFoodLog: FoodLog = {
       id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
+      createdAt: now.toISOString(),
+      loggedDate: getLocalDateKey(now),
       ...foodLog,
     };
 
@@ -129,28 +162,11 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
     setFoodLogs((currentLogs) => currentLogs.filter((food) => food.id !== id));
   };
 
-  const clearFoodLogs = () => {
-    setFoodLogs([]);
-  };
-
-  const totals = useMemo(() => {
-    return foodLogs.reduce(
-      (sum, food) => {
-        return {
-          calories: sum.calories + food.calories,
-          protein: sum.protein + food.protein,
-          carbs: sum.carbs + food.carbs,
-          fat: sum.fat + food.fat,
-        };
-      },
-      {
-        calories: 0,
-        protein: 0,
-        carbs: 0,
-        fat: 0,
-      },
+  const clearFoodLogsForDate = (loggedDate: string) => {
+    setFoodLogs((currentLogs) =>
+      currentLogs.filter((food) => food.loggedDate !== loggedDate),
     );
-  }, [foodLogs]);
+  };
 
   return (
     <FoodLogContext.Provider
@@ -158,11 +174,7 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
         foodLogs,
         addFoodLog,
         deleteFoodLog,
-        clearFoodLogs,
-        totalCalories: totals.calories,
-        totalProtein: totals.protein,
-        totalCarbs: totals.carbs,
-        totalFat: totals.fat,
+        clearFoodLogsForDate,
       }}
     >
       {children}
