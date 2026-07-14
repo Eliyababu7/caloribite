@@ -1,5 +1,8 @@
+import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import type { AppTheme } from "../theme/theme";
+import { useAppTheme } from "../theme/theme";
 import type { FoodLog, MealType } from "../types/food";
 import { FoodCard } from "./FoodCard";
 
@@ -14,6 +17,9 @@ export function MealSection({
   foods,
   onDeleteFood,
 }: MealSectionProps) {
+  const theme = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const totalCalories = foods.reduce((sum, food) => sum + food.calories, 0);
 
   const itemLabel = foods.length === 1 ? "item" : "items";
@@ -25,7 +31,10 @@ export function MealSection({
           {mealType}
         </Text>
 
-        <Text style={styles.summary}>
+        <Text
+          style={styles.summary}
+          accessibilityLabel={`${foods.length} ${itemLabel}, ${totalCalories} kilocalories`}
+        >
           {foods.length} {itemLabel} • {totalCalories} kcal
         </Text>
       </View>
@@ -47,41 +56,47 @@ export function MealSection({
   );
 }
 
-const styles = StyleSheet.create({
-  section: {
-    marginBottom: 18,
-  },
+function createStyles(theme: AppTheme) {
+  const { colors } = theme;
 
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 10,
-  },
+  return StyleSheet.create({
+    section: {
+      marginBottom: 18,
+    },
 
-  title: {
-    fontSize: 19,
-    fontWeight: "800",
-    color: "#143D3C",
-  },
+    header: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+      marginBottom: 10,
+    },
 
-  summary: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#425756",
-  },
+    title: {
+      fontSize: 19,
+      fontWeight: "800",
+      color: colors.text,
+    },
 
-  emptyCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#E6DCD6",
-  },
+    summary: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: colors.textSecondary,
+      textAlign: "right",
+    },
 
-  emptyText: {
-    fontSize: 14,
-    color: "#7A8A89",
-  },
-});
+    emptyCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 18,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+
+    emptyText: {
+      fontSize: 14,
+      color: colors.textSecondary,
+    },
+  });
+}

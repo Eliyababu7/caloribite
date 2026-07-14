@@ -1,5 +1,15 @@
-import { StyleSheet, Text, View } from "react-native";
+import { useMemo } from "react";
+import {
+  type StyleProp,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
+} from "react-native";
 
+import { calculateProgress } from "../services/nutrition/nutritionService";
+import type { AppTheme } from "../theme/theme";
+import { useAppTheme } from "../theme/theme";
 import { ProgressBar } from "./ProgressBar";
 
 type MacroCardProps = {
@@ -8,27 +18,24 @@ type MacroCardProps = {
   target: number;
   unit?: string;
   fillColor?: string;
+  style?: StyleProp<ViewStyle>;
 };
-
-function calculateProgress(current: number, target: number): number {
-  if (target <= 0) {
-    return 0;
-  }
-
-  return Math.min(Math.round((current / target) * 100), 100);
-}
 
 export function MacroCard({
   label,
   current,
   target,
   unit = "g",
-  fillColor = "#143D3C",
+  fillColor,
+  style,
 }: MacroCardProps) {
+  const theme = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const progress = calculateProgress(current, target);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, style]}>
       <View style={styles.topRow}>
         <Text style={styles.label}>{label}</Text>
 
@@ -43,8 +50,8 @@ export function MacroCard({
         value={current}
         max={target}
         height={10}
-        trackColor="#F0E3DC"
-        fillColor={fillColor}
+        fillColor={fillColor ?? theme.colors.brand}
+        accessibilityLabel={`${label} progress`}
         style={styles.progressBar}
       />
 
@@ -53,35 +60,41 @@ export function MacroCard({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: 18,
-  },
+function createStyles(theme: AppTheme) {
+  const { colors } = theme;
 
-  topRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
+  return StyleSheet.create({
+    container: {
+      marginBottom: 18,
+    },
 
-  label: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#143D3C",
-  },
+    topRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 8,
+      gap: 12,
+    },
 
-  value: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#425756",
-  },
+    label: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: colors.text,
+    },
 
-  progressBar: {
-    marginBottom: 6,
-  },
+    value: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: colors.textSecondary,
+      textAlign: "right",
+    },
 
-  hint: {
-    fontSize: 13,
-    color: "#425756",
-  },
-});
+    progressBar: {
+      marginBottom: 6,
+    },
+
+    hint: {
+      fontSize: 13,
+      color: colors.textSecondary,
+    },
+  });
+}

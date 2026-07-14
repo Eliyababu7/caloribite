@@ -1,5 +1,8 @@
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import type { AppTheme } from "../theme/theme";
+import { useAppTheme } from "../theme/theme";
 import { formatDiaryDate } from "../utils/date";
 
 type DateNavigatorProps = {
@@ -17,6 +20,9 @@ export function DateNavigator({
   onNext,
   onToday,
 }: DateNavigatorProps) {
+  const theme = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const isToday = selectedDateKey === todayDateKey;
 
   return (
@@ -33,7 +39,12 @@ export function DateNavigator({
       <View style={styles.dateDetails}>
         <Text style={styles.label}>Diary date</Text>
 
-        <Text style={styles.dateText} accessibilityRole="header">
+        <Text
+          style={styles.dateText}
+          accessibilityRole="header"
+          accessibilityLiveRegion="polite"
+          numberOfLines={2}
+        >
           {formatDiaryDate(selectedDateKey)}
         </Text>
 
@@ -42,6 +53,7 @@ export function DateNavigator({
             onPress={onToday}
             accessibilityRole="button"
             accessibilityLabel="Return to today"
+            hitSlop={8}
           >
             <Text style={styles.todayText}>Go to today</Text>
           </Pressable>
@@ -64,65 +76,71 @@ export function DateNavigator({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E6DCD6",
-    padding: 14,
-    marginBottom: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+function createStyles(theme: AppTheme) {
+  const { colors } = theme;
 
-  arrowButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#143D3C",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  return StyleSheet.create({
+    container: {
+      backgroundColor: colors.surface,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 14,
+      marginBottom: 22,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
 
-  arrowButtonDisabled: {
-    backgroundColor: "#E6DCD6",
-  },
+    arrowButton: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: colors.brand,
+      alignItems: "center",
+      justifyContent: "center",
+    },
 
-  arrowText: {
-    color: "#FFFFFF",
-    fontSize: 34,
-    lineHeight: 36,
-    fontWeight: "700",
-  },
+    arrowButtonDisabled: {
+      backgroundColor: colors.disabled,
+    },
 
-  arrowTextDisabled: {
-    color: "#9AA7A6",
-  },
+    arrowText: {
+      color: colors.onBrand,
+      fontSize: 34,
+      lineHeight: 36,
+      fontWeight: "700",
+    },
 
-  dateDetails: {
-    flex: 1,
-    alignItems: "center",
-    paddingHorizontal: 12,
-  },
+    arrowTextDisabled: {
+      color: colors.disabledText,
+    },
 
-  label: {
-    fontSize: 12,
-    color: "#7A8A89",
-    marginBottom: 2,
-  },
+    dateDetails: {
+      flex: 1,
+      minWidth: 0,
+      alignItems: "center",
+      paddingHorizontal: 12,
+    },
 
-  dateText: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#143D3C",
-  },
+    label: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginBottom: 2,
+    },
 
-  todayText: {
-    color: "#FF6B4A",
-    fontSize: 13,
-    fontWeight: "700",
-    marginTop: 3,
-  },
-});
+    dateText: {
+      fontSize: 20,
+      fontWeight: "800",
+      color: colors.text,
+      textAlign: "center",
+    },
+
+    todayText: {
+      color: colors.accent,
+      fontSize: 13,
+      fontWeight: "700",
+      marginTop: 3,
+    },
+  });
+}

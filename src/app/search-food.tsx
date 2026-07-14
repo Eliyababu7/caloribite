@@ -8,72 +8,22 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { STARTER_FOODS, type StarterFood } from "../data/starterFoods";
+import type { AppTheme } from "../theme/theme";
+import { useAppTheme } from "../theme/theme";
 import { formatDiaryDate } from "../utils/date";
 import { resolveDiaryDateParam } from "../utils/diaryRoute";
-
-const STARTER_FOODS = [
-  {
-    foodName: "Banana",
-    calories: 105,
-    protein: 1,
-    carbs: 27,
-    fat: 0,
-  },
-  {
-    foodName: "Boiled egg",
-    calories: 78,
-    protein: 6,
-    carbs: 1,
-    fat: 5,
-  },
-  {
-    foodName: "Chicken breast 100g",
-    calories: 165,
-    protein: 31,
-    carbs: 0,
-    fat: 4,
-  },
-  {
-    foodName: "Cooked white rice 1 cup",
-    calories: 205,
-    protein: 4,
-    carbs: 45,
-    fat: 0,
-  },
-  {
-    foodName: "Salmon fillet 100g",
-    calories: 208,
-    protein: 20,
-    carbs: 0,
-    fat: 13,
-  },
-  {
-    foodName: "Greek yogurt 100g",
-    calories: 59,
-    protein: 10,
-    carbs: 4,
-    fat: 0,
-  },
-  {
-    foodName: "Chicken curry",
-    calories: 450,
-    protein: 35,
-    carbs: 40,
-    fat: 15,
-  },
-  {
-    foodName: "Vegetable biryani",
-    calories: 420,
-    protein: 9,
-    carbs: 70,
-    fat: 12,
-  },
-];
 
 export default function SearchFoodScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
+
+  const theme = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const [searchText, setSearchText] = useState("");
 
   const loggedDate = resolveDiaryDateParam(params.loggedDate);
@@ -90,7 +40,7 @@ export default function SearchFoodScreen() {
     );
   }, [searchText]);
 
-  const handleSelectFood = (food: (typeof STARTER_FOODS)[number]) => {
+  const handleSelectFood = (food: StarterFood) => {
     router.push({
       pathname: "/confirm-food",
       params: {
@@ -114,208 +64,298 @@ export default function SearchFoodScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Search food</Text>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[
+        styles.container,
+        {
+          paddingTop: Math.max(insets.top + 24, 24),
+          paddingBottom: Math.max(insets.bottom + 24, 24),
+        },
+      ]}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+    >
+      <View style={styles.content}>
+        <Text style={styles.title} accessibilityRole="header">
+          Search food
+        </Text>
 
-      <Text style={styles.subtitle}>
-        Search our starter food database. Select a food, then confirm or edit
-        its nutrition details.
-      </Text>
+        <Text style={styles.subtitle}>
+          Search our starter food database. Select a food, then confirm or edit
+          its nutrition details.
+        </Text>
 
-      <View style={styles.dateCard}>
-        <Text style={styles.dateLabel}>Adding food to</Text>
+        <View style={styles.dateCard}>
+          <Text style={styles.dateLabel}>Adding food to</Text>
 
-        <Text style={styles.dateValue}>{formatDiaryDate(loggedDate)}</Text>
-      </View>
+          <Text style={styles.dateValue}>{formatDiaryDate(loggedDate)}</Text>
+        </View>
 
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search banana, rice, chicken..."
-        value={searchText}
-        onChangeText={setSearchText}
-        autoFocus
-      />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search banana, rice, chicken..."
+          placeholderTextColor={theme.colors.placeholder}
+          selectionColor={theme.colors.accent}
+          value={searchText}
+          onChangeText={setSearchText}
+          autoFocus
+          returnKeyType="search"
+          accessibilityLabel="Search foods"
+        />
 
-      <View style={styles.resultsHeader}>
-        <Text style={styles.resultsTitle}>Results</Text>
+        <View style={styles.resultsHeader}>
+          <Text style={styles.resultsTitle}>Results</Text>
 
-        <Text style={styles.resultsCount}>{filteredFoods.length} found</Text>
-      </View>
+          <Text style={styles.resultsCount} accessibilityLiveRegion="polite">
+            {filteredFoods.length} found
+          </Text>
+        </View>
 
-      {filteredFoods.map((food) => (
-        <Pressable
-          key={food.foodName}
-          style={styles.foodCard}
-          onPress={() => handleSelectFood(food)}
-          accessibilityRole="button"
-          accessibilityLabel={`Select ${food.foodName}`}
-        >
-          <View style={styles.foodInfo}>
-            <Text style={styles.foodName}>{food.foodName}</Text>
+        {filteredFoods.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No food found</Text>
 
-            <Text style={styles.foodMacros}>
-              P {food.protein}g • C {food.carbs}g • F {food.fat}g
+            <Text style={styles.emptyText}>
+              Try another search or enter the food manually.
             </Text>
           </View>
+        ) : (
+          filteredFoods.map((food) => (
+            <Pressable
+              key={food.foodName}
+              style={styles.foodCard}
+              onPress={() => handleSelectFood(food)}
+              accessibilityRole="button"
+              accessibilityLabel={`Select ${food.foodName}`}
+              accessibilityHint="Opens the food confirmation screen"
+            >
+              <View style={styles.foodInfo}>
+                <Text style={styles.foodName}>{food.foodName}</Text>
 
-          <View style={styles.foodRight}>
-            <Text style={styles.foodCalories}>{food.calories} kcal</Text>
+                <Text style={styles.foodMacros}>
+                  P {food.protein}g • C {food.carbs}g • F {food.fat}g
+                </Text>
+              </View>
 
-            <Text style={styles.addText}>Select</Text>
-          </View>
+              <View style={styles.foodRight}>
+                <Text style={styles.foodCalories}>{food.calories} kcal</Text>
+
+                <Text style={styles.selectText}>Select</Text>
+              </View>
+            </Pressable>
+          ))
+        )}
+
+        <Pressable
+          style={styles.manualButton}
+          onPress={handleManualEntry}
+          accessibilityRole="button"
+          accessibilityLabel="Enter food manually"
+        >
+          <Text style={styles.manualButtonText}>Enter food manually</Text>
         </Pressable>
-      ))}
 
-      <Pressable style={styles.manualButton} onPress={handleManualEntry}>
-        <Text style={styles.manualButtonText}>Enter food manually</Text>
-      </Pressable>
-
-      <Pressable onPress={() => router.back()}>
-        <Text style={styles.backText}>Back to diary</Text>
-      </Pressable>
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Back to diary"
+          hitSlop={8}
+        >
+          <Text style={styles.backText}>Back to diary</Text>
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    backgroundColor: "#FFF7F2",
-    padding: 24,
-    paddingTop: 70,
-  },
+function createStyles(theme: AppTheme) {
+  const { colors } = theme;
 
-  title: {
-    fontSize: 36,
-    fontWeight: "800",
-    color: "#143D3C",
-    marginBottom: 10,
-  },
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
 
-  subtitle: {
-    fontSize: 16,
-    color: "#425756",
-    lineHeight: 24,
-    marginBottom: 18,
-  },
+    container: {
+      flexGrow: 1,
+      backgroundColor: colors.background,
+      paddingHorizontal: 24,
+    },
 
-  dateCard: {
-    backgroundColor: "#FFF0E9",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 22,
-    alignItems: "center",
-  },
+    content: {
+      width: "100%",
+      maxWidth: 820,
+      alignSelf: "center",
+    },
 
-  dateLabel: {
-    color: "#7A5B4D",
-    fontSize: 13,
-    marginBottom: 3,
-  },
+    title: {
+      fontSize: 36,
+      fontWeight: "800",
+      color: colors.text,
+      marginBottom: 10,
+    },
 
-  dateValue: {
-    color: "#FF6B4A",
-    fontSize: 18,
-    fontWeight: "800",
-  },
+    subtitle: {
+      fontSize: 16,
+      color: colors.textSecondary,
+      lineHeight: 24,
+      marginBottom: 18,
+    },
 
-  searchInput: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E6DCD6",
-    borderRadius: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    fontSize: 16,
-    marginBottom: 22,
-  },
+    dateCard: {
+      backgroundColor: colors.accentMuted,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 22,
+      alignItems: "center",
+    },
 
-  resultsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 14,
-  },
+    dateLabel: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      marginBottom: 3,
+    },
 
-  resultsTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#143D3C",
-  },
+    dateValue: {
+      color: colors.accent,
+      fontSize: 18,
+      fontWeight: "800",
+      textAlign: "center",
+    },
 
-  resultsCount: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#FF6B4A",
-  },
+    searchInput: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      paddingHorizontal: 18,
+      paddingVertical: 16,
+      fontSize: 16,
+      color: colors.text,
+      marginBottom: 22,
+    },
 
-  foodCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#E6DCD6",
-    marginBottom: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-  },
+    resultsHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+      marginBottom: 14,
+    },
 
-  foodInfo: {
-    flex: 1,
-  },
+    resultsTitle: {
+      fontSize: 22,
+      fontWeight: "800",
+      color: colors.text,
+    },
 
-  foodName: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: "#143D3C",
-    marginBottom: 6,
-  },
+    resultsCount: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.accent,
+    },
 
-  foodMacros: {
-    fontSize: 14,
-    color: "#425756",
-  },
+    foodCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 18,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: 12,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+    },
 
-  foodRight: {
-    alignItems: "flex-end",
-  },
+    foodInfo: {
+      flex: 1,
+      minWidth: 0,
+    },
 
-  foodCalories: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#FF6B4A",
-    marginBottom: 6,
-  },
+    foodName: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: colors.text,
+      marginBottom: 6,
+    },
 
-  addText: {
-    color: "#143D3C",
-    fontSize: 13,
-    fontWeight: "800",
-  },
+    foodMacros: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      lineHeight: 20,
+    },
 
-  manualButton: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#143D3C",
-    borderRadius: 999,
-    paddingVertical: 15,
-    alignItems: "center",
-    marginTop: 10,
-  },
+    foodRight: {
+      alignItems: "flex-end",
+    },
 
-  manualButtonText: {
-    color: "#143D3C",
-    fontSize: 15,
-    fontWeight: "800",
-  },
+    foodCalories: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: colors.accent,
+      marginBottom: 6,
+      textAlign: "right",
+    },
 
-  backText: {
-    color: "#FF6B4A",
-    textAlign: "center",
-    fontSize: 15,
-    fontWeight: "700",
-    marginTop: 20,
-  },
-});
+    selectText: {
+      color: colors.brand,
+      fontSize: 13,
+      fontWeight: "800",
+    },
+
+    emptyCard: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 18,
+      padding: 22,
+      marginBottom: 12,
+    },
+
+    emptyTitle: {
+      color: colors.text,
+      fontSize: 17,
+      fontWeight: "800",
+      marginBottom: 6,
+    },
+
+    emptyText: {
+      color: colors.textSecondary,
+      fontSize: 15,
+      lineHeight: 22,
+    },
+
+    manualButton: {
+      minHeight: 52,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.brand,
+      borderRadius: 999,
+      paddingVertical: 15,
+      paddingHorizontal: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 10,
+    },
+
+    manualButtonText: {
+      color: colors.brand,
+      fontSize: 15,
+      fontWeight: "800",
+      textAlign: "center",
+    },
+
+    backText: {
+      color: colors.accent,
+      textAlign: "center",
+      fontSize: 15,
+      fontWeight: "700",
+      marginTop: 20,
+    },
+  });
+}

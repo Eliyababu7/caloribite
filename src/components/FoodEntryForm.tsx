@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -9,6 +9,8 @@ import {
   View,
 } from "react-native";
 
+import type { AppTheme } from "../theme/theme";
+import { useAppTheme } from "../theme/theme";
 import type { MealType, NewFoodLog } from "../types/food";
 import { formatDiaryDate } from "../utils/date";
 import { getDefaultMealType, MEAL_TYPES } from "../utils/meal";
@@ -63,6 +65,7 @@ function parseNutritionNumber(
       "Invalid value",
       `${label} must be a valid number greater than or equal to zero.`,
     );
+
     return null;
   }
 
@@ -79,6 +82,9 @@ export function FoodEntryForm({
   onSubmit,
   onCancel,
 }: FoodEntryFormProps) {
+  const theme = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const [mealType, setMealType] = useState<MealType>(
     initialValues.mealType ?? getDefaultMealType(),
   );
@@ -94,7 +100,6 @@ export function FoodEntryForm({
   const [protein, setProtein] = useState(getInputValue(initialValues.protein));
 
   const [carbs, setCarbs] = useState(getInputValue(initialValues.carbs));
-
   const [fat, setFat] = useState(getInputValue(initialValues.fat));
 
   const handleSubmit = () => {
@@ -140,7 +145,10 @@ export function FoodEntryForm({
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.content}>
         <Text style={styles.title}>{title}</Text>
 
@@ -184,7 +192,8 @@ export function FoodEntryForm({
           value={foodName}
           onChangeText={setFoodName}
           placeholder="Food name"
-          placeholderTextColor="#82908F"
+          placeholderTextColor={theme.colors.placeholder}
+          selectionColor={theme.colors.accent}
         />
 
         <Text style={styles.label}>Calories</Text>
@@ -195,7 +204,8 @@ export function FoodEntryForm({
           onChangeText={setCalories}
           keyboardType="decimal-pad"
           placeholder="Calories"
-          placeholderTextColor="#82908F"
+          placeholderTextColor={theme.colors.placeholder}
+          selectionColor={theme.colors.accent}
         />
 
         <Text style={styles.label}>Protein (g)</Text>
@@ -206,7 +216,8 @@ export function FoodEntryForm({
           onChangeText={setProtein}
           keyboardType="decimal-pad"
           placeholder="Protein"
-          placeholderTextColor="#82908F"
+          placeholderTextColor={theme.colors.placeholder}
+          selectionColor={theme.colors.accent}
         />
 
         <Text style={styles.label}>Carbs (g)</Text>
@@ -217,7 +228,8 @@ export function FoodEntryForm({
           onChangeText={setCarbs}
           keyboardType="decimal-pad"
           placeholder="Carbs"
-          placeholderTextColor="#82908F"
+          placeholderTextColor={theme.colors.placeholder}
+          selectionColor={theme.colors.accent}
         />
 
         <Text style={styles.label}>Fat (g)</Text>
@@ -228,7 +240,8 @@ export function FoodEntryForm({
           onChangeText={setFat}
           keyboardType="decimal-pad"
           placeholder="Fat"
-          placeholderTextColor="#82908F"
+          placeholderTextColor={theme.colors.placeholder}
+          selectionColor={theme.colors.accent}
         />
 
         <Pressable style={styles.primaryButton} onPress={handleSubmit}>
@@ -243,123 +256,127 @@ export function FoodEntryForm({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    backgroundColor: "#FFF7F2",
-    padding: 24,
-    paddingTop: 70,
-  },
+function createStyles(theme: AppTheme) {
+  const { colors } = theme;
 
-  content: {
-    width: "100%",
-    maxWidth: 720,
-    alignSelf: "center",
-  },
+  return StyleSheet.create({
+    container: {
+      flexGrow: 1,
+      backgroundColor: colors.background,
+      padding: 24,
+      paddingTop: 70,
+    },
 
-  title: {
-    fontSize: 36,
-    fontWeight: "800",
-    color: "#143D3C",
-    marginBottom: 10,
-  },
+    content: {
+      width: "100%",
+      maxWidth: 720,
+      alignSelf: "center",
+    },
 
-  subtitle: {
-    fontSize: 16,
-    color: "#425756",
-    lineHeight: 24,
-    marginBottom: 22,
-  },
+    title: {
+      fontSize: 36,
+      fontWeight: "800",
+      color: colors.text,
+      marginBottom: 10,
+    },
 
-  dateCard: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E6DCD6",
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 24,
-  },
+    subtitle: {
+      fontSize: 16,
+      color: colors.textSecondary,
+      lineHeight: 24,
+      marginBottom: 22,
+    },
 
-  dateLabel: {
-    fontSize: 13,
-    color: "#425756",
-    marginBottom: 4,
-  },
+    dateCard: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      padding: 18,
+      marginBottom: 24,
+    },
 
-  dateValue: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#143D3C",
-  },
+    dateLabel: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginBottom: 4,
+    },
 
-  label: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#143D3C",
-    marginBottom: 8,
-  },
+    dateValue: {
+      fontSize: 18,
+      fontWeight: "800",
+      color: colors.text,
+    },
 
-  mealRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 18,
-  },
+    label: {
+      fontSize: 15,
+      fontWeight: "700",
+      color: colors.text,
+      marginBottom: 8,
+    },
 
-  mealChip: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E6DCD6",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-  },
+    mealRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+      marginBottom: 18,
+    },
 
-  mealChipActive: {
-    backgroundColor: "#143D3C",
-    borderColor: "#143D3C",
-  },
+    mealChip: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderRadius: 999,
+    },
 
-  mealChipText: {
-    color: "#143D3C",
-    fontWeight: "700",
-  },
+    mealChipActive: {
+      backgroundColor: colors.brand,
+      borderColor: colors.brand,
+    },
 
-  mealChipTextActive: {
-    color: "#FFFFFF",
-  },
+    mealChipText: {
+      color: colors.text,
+      fontWeight: "700",
+    },
 
-  input: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E6DCD6",
-    borderRadius: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    fontSize: 16,
-    color: "#143D3C",
-    marginBottom: 16,
-  },
+    mealChipTextActive: {
+      color: colors.onBrand,
+    },
 
-  primaryButton: {
-    backgroundColor: "#143D3C",
-    paddingVertical: 16,
-    borderRadius: 999,
-    alignItems: "center",
-    marginTop: 10,
-    marginBottom: 18,
-  },
+    input: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      paddingHorizontal: 18,
+      paddingVertical: 16,
+      fontSize: 16,
+      color: colors.text,
+      marginBottom: 16,
+    },
 
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+    primaryButton: {
+      backgroundColor: colors.brand,
+      paddingVertical: 16,
+      borderRadius: 999,
+      alignItems: "center",
+      marginTop: 10,
+      marginBottom: 18,
+    },
 
-  cancelText: {
-    color: "#FF6B4A",
-    textAlign: "center",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-});
+    primaryButtonText: {
+      color: colors.onBrand,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+
+    cancelText: {
+      color: colors.accent,
+      textAlign: "center",
+      fontSize: 15,
+      fontWeight: "700",
+    },
+  });
+}

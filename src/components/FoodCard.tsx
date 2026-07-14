@@ -1,5 +1,8 @@
+import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import type { AppTheme } from "../theme/theme";
+import { useAppTheme } from "../theme/theme";
 import type { FoodLog } from "../types/food";
 
 type FoodCardProps = {
@@ -8,6 +11,9 @@ type FoodCardProps = {
 };
 
 export function FoodCard({ food, onDelete }: FoodCardProps) {
+  const theme = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.card}>
       <View style={styles.foodInfo}>
@@ -25,6 +31,8 @@ export function FoodCard({ food, onDelete }: FoodCardProps) {
           onPress={onDelete}
           accessibilityRole="button"
           accessibilityLabel={`Delete ${food.foodName}`}
+          accessibilityHint="Removes this food from your diary"
+          hitSlop={8}
         >
           <Text style={styles.deleteText}>Delete</Text>
         </Pressable>
@@ -33,50 +41,57 @@ export function FoodCard({ food, onDelete }: FoodCardProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#E6DCD6",
-    marginBottom: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-  },
+function createStyles(theme: AppTheme) {
+  const { colors } = theme;
 
-  foodInfo: {
-    flex: 1,
-  },
+  return StyleSheet.create({
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 18,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: 12,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+    },
 
-  foodName: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: "#143D3C",
-    marginBottom: 6,
-  },
+    foodInfo: {
+      flex: 1,
+      minWidth: 0,
+    },
 
-  foodMacros: {
-    fontSize: 14,
-    color: "#425756",
-  },
+    foodName: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: colors.text,
+      marginBottom: 6,
+    },
 
-  foodRight: {
-    alignItems: "flex-end",
-  },
+    foodMacros: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      lineHeight: 20,
+    },
 
-  foodCalories: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#FF6B4A",
-  },
+    foodRight: {
+      alignItems: "flex-end",
+    },
 
-  deleteText: {
-    color: "#C0392B",
-    fontSize: 13,
-    fontWeight: "700",
-    marginTop: 6,
-  },
-});
+    foodCalories: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: colors.accent,
+      textAlign: "right",
+    },
+
+    deleteText: {
+      color: colors.danger,
+      fontSize: 13,
+      fontWeight: "700",
+      marginTop: 6,
+    },
+  });
+}
