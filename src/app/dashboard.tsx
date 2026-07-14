@@ -1,6 +1,7 @@
-import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { resolveDiaryDateParam } from "../utils/diaryRoute";
 
 import { DateNavigator } from "../components/DateNavigator";
 import { MacroCard } from "../components/MacroCard";
@@ -25,13 +26,19 @@ const DEFAULT_NUTRITION_TARGETS: NutritionTargets = {
 };
 
 export default function DashboardScreen() {
-  const router = useRouter();
-
   const { foodLogs, deleteFoodLog, clearFoodLogsForDate } = useFoodLogs();
 
-  const todayDateKey = getLocalDateKey();
+  const router = useRouter();
+  const params = useLocalSearchParams();
 
-  const [selectedDateKey, setSelectedDateKey] = useState(todayDateKey);
+  const todayDateKey = getLocalDateKey();
+  const requestedDateKey = resolveDiaryDateParam(params.loggedDate);
+
+  const [selectedDateKey, setSelectedDateKey] = useState(requestedDateKey);
+
+  useEffect(() => {
+    setSelectedDateKey(requestedDateKey);
+  }, [requestedDateKey]);
 
   const isViewingToday = selectedDateKey === todayDateKey;
 
@@ -94,8 +101,12 @@ export default function DashboardScreen() {
   };
 
   const handleAddFood = () => {
-    setSelectedDateKey(todayDateKey);
-    router.push("/add-food");
+    router.push({
+      pathname: "/search-food",
+      params: {
+        loggedDate: selectedDateKey,
+      },
+    });
   };
 
   return (
@@ -191,7 +202,7 @@ export default function DashboardScreen() {
 
       <Pressable style={styles.primaryButton} onPress={handleAddFood}>
         <Text style={styles.primaryButtonText}>
-          {isViewingToday ? "Add food" : "Add food for today"}
+          {isViewingToday ? "Add food" : "Add food to this day"}
         </Text>
       </Pressable>
 

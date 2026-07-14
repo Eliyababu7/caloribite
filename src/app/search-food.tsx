@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   Pressable,
@@ -9,9 +9,24 @@ import {
   View,
 } from "react-native";
 
+import { formatDiaryDate } from "../utils/date";
+import { resolveDiaryDateParam } from "../utils/diaryRoute";
+
 const STARTER_FOODS = [
-  { foodName: "Banana", calories: 105, protein: 1, carbs: 27, fat: 0 },
-  { foodName: "Boiled egg", calories: 78, protein: 6, carbs: 1, fat: 5 },
+  {
+    foodName: "Banana",
+    calories: 105,
+    protein: 1,
+    carbs: 27,
+    fat: 0,
+  },
+  {
+    foodName: "Boiled egg",
+    calories: 78,
+    protein: 6,
+    carbs: 1,
+    fat: 5,
+  },
   {
     foodName: "Chicken breast 100g",
     calories: 165,
@@ -40,7 +55,13 @@ const STARTER_FOODS = [
     carbs: 4,
     fat: 0,
   },
-  { foodName: "Chicken curry", calories: 450, protein: 35, carbs: 40, fat: 15 },
+  {
+    foodName: "Chicken curry",
+    calories: 450,
+    protein: 35,
+    carbs: 40,
+    fat: 15,
+  },
   {
     foodName: "Vegetable biryani",
     calories: 420,
@@ -52,12 +73,17 @@ const STARTER_FOODS = [
 
 export default function SearchFoodScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const [searchText, setSearchText] = useState("");
+
+  const loggedDate = resolveDiaryDateParam(params.loggedDate);
 
   const filteredFoods = useMemo(() => {
     const query = searchText.trim().toLowerCase();
 
-    if (!query) return STARTER_FOODS;
+    if (!query) {
+      return STARTER_FOODS;
+    }
 
     return STARTER_FOODS.filter((food) =>
       food.foodName.toLowerCase().includes(query),
@@ -73,6 +99,16 @@ export default function SearchFoodScreen() {
         protein: String(food.protein),
         carbs: String(food.carbs),
         fat: String(food.fat),
+        loggedDate,
+      },
+    });
+  };
+
+  const handleManualEntry = () => {
+    router.push({
+      pathname: "/add-food",
+      params: {
+        loggedDate,
       },
     });
   };
@@ -83,8 +119,14 @@ export default function SearchFoodScreen() {
 
       <Text style={styles.subtitle}>
         Search our starter food database. Select a food, then confirm or edit
-        the details before saving.
+        its nutrition details.
       </Text>
+
+      <View style={styles.dateCard}>
+        <Text style={styles.dateLabel}>Adding food to</Text>
+
+        <Text style={styles.dateValue}>{formatDiaryDate(loggedDate)}</Text>
+      </View>
 
       <TextInput
         style={styles.searchInput}
@@ -96,6 +138,7 @@ export default function SearchFoodScreen() {
 
       <View style={styles.resultsHeader}>
         <Text style={styles.resultsTitle}>Results</Text>
+
         <Text style={styles.resultsCount}>{filteredFoods.length} found</Text>
       </View>
 
@@ -104,9 +147,12 @@ export default function SearchFoodScreen() {
           key={food.foodName}
           style={styles.foodCard}
           onPress={() => handleSelectFood(food)}
+          accessibilityRole="button"
+          accessibilityLabel={`Select ${food.foodName}`}
         >
           <View style={styles.foodInfo}>
             <Text style={styles.foodName}>{food.foodName}</Text>
+
             <Text style={styles.foodMacros}>
               P {food.protein}g • C {food.carbs}g • F {food.fat}g
             </Text>
@@ -114,13 +160,18 @@ export default function SearchFoodScreen() {
 
           <View style={styles.foodRight}>
             <Text style={styles.foodCalories}>{food.calories} kcal</Text>
+
             <Text style={styles.addText}>Select</Text>
           </View>
         </Pressable>
       ))}
 
+      <Pressable style={styles.manualButton} onPress={handleManualEntry}>
+        <Text style={styles.manualButtonText}>Enter food manually</Text>
+      </Pressable>
+
       <Pressable onPress={() => router.back()}>
-        <Text style={styles.backText}>Back</Text>
+        <Text style={styles.backText}>Back to diary</Text>
       </Pressable>
     </ScrollView>
   );
@@ -133,18 +184,41 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 70,
   },
+
   title: {
     fontSize: 36,
     fontWeight: "800",
     color: "#143D3C",
     marginBottom: 10,
   },
+
   subtitle: {
     fontSize: 16,
     color: "#425756",
     lineHeight: 24,
-    marginBottom: 22,
+    marginBottom: 18,
   },
+
+  dateCard: {
+    backgroundColor: "#FFF0E9",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 22,
+    alignItems: "center",
+  },
+
+  dateLabel: {
+    color: "#7A5B4D",
+    fontSize: 13,
+    marginBottom: 3,
+  },
+
+  dateValue: {
+    color: "#FF6B4A",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+
   searchInput: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
@@ -155,22 +229,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 22,
   },
+
   resultsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 14,
   },
+
   resultsTitle: {
     fontSize: 22,
     fontWeight: "800",
     color: "#143D3C",
   },
+
   resultsCount: {
     fontSize: 14,
     fontWeight: "700",
     color: "#FF6B4A",
   },
+
   foodCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
@@ -183,33 +261,56 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+
   foodInfo: {
     flex: 1,
   },
+
   foodName: {
     fontSize: 17,
     fontWeight: "800",
     color: "#143D3C",
     marginBottom: 6,
   },
+
   foodMacros: {
     fontSize: 14,
     color: "#425756",
   },
+
   foodRight: {
     alignItems: "flex-end",
   },
+
   foodCalories: {
     fontSize: 16,
     fontWeight: "800",
     color: "#FF6B4A",
     marginBottom: 6,
   },
+
   addText: {
     color: "#143D3C",
     fontSize: 13,
     fontWeight: "800",
   },
+
+  manualButton: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#143D3C",
+    borderRadius: 999,
+    paddingVertical: 15,
+    alignItems: "center",
+    marginTop: 10,
+  },
+
+  manualButtonText: {
+    color: "#143D3C",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
   backText: {
     color: "#FF6B4A",
     textAlign: "center",
