@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
@@ -82,6 +83,7 @@ export function FoodEntryForm({
   onSubmit,
   onCancel,
 }: FoodEntryFormProps) {
+  const insets = useSafeAreaInsets();
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -146,7 +148,13 @@ export function FoodEntryForm({
 
   return (
     <ScrollView
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[
+        styles.container,
+        {
+          paddingTop: Math.max(insets.top + 24, 24),
+          paddingBottom: Math.max(insets.bottom + 24, 24),
+        },
+      ]}
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.content}>
@@ -264,7 +272,6 @@ function createStyles(theme: AppTheme) {
       flexGrow: 1,
       backgroundColor: colors.background,
       padding: 24,
-      paddingTop: 70,
     },
 
     content: {
