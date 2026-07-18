@@ -1,16 +1,40 @@
 import { useRouter } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useMemo } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import type { AppTheme } from "../theme/theme";
+import { useAppTheme } from "../theme/theme";
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+
+  const theme = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.logoCircle}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[
+        styles.container,
+        {
+          paddingTop: Math.max(insets.top + 24, 24),
+          paddingBottom: Math.max(insets.bottom + 24, 24),
+        },
+      ]}
+    >
+      <View
+        style={styles.logoCircle}
+        accessible
+        accessibilityLabel="CaloriBite logo"
+      >
         <Text style={styles.logoText}>CB</Text>
       </View>
 
-      <Text style={styles.title}>CaloriBite</Text>
+      <Text style={styles.title} accessibilityRole="header">
+        CaloriBite
+      </Text>
 
       <Text style={styles.tagline}>Every bite. Every rep. Every result.</Text>
 
@@ -22,6 +46,9 @@ export default function WelcomeScreen() {
       <Pressable
         style={styles.primaryButton}
         onPress={() => router.push("/signup")}
+        accessibilityRole="button"
+        accessibilityLabel="Get started"
+        accessibilityHint="Opens account registration"
       >
         <Text style={styles.primaryButtonText}>Get Started</Text>
       </Pressable>
@@ -29,80 +56,110 @@ export default function WelcomeScreen() {
       <Pressable
         style={styles.secondaryButton}
         onPress={() => router.push("/login")}
+        accessibilityRole="button"
+        accessibilityLabel="I already have an account"
+        accessibilityHint="Opens the login screen"
       >
         <Text style={styles.secondaryButtonText}>
           I already have an account
         </Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#FFF7F2",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  logoCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: "#FF6B4A",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-  },
-  logoText: {
-    color: "#FFFFFF",
-    fontSize: 32,
-    fontWeight: "800",
-  },
-  title: {
-    fontSize: 42,
-    fontWeight: "800",
-    color: "#143D3C",
-    marginBottom: 8,
-  },
-  tagline: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#FF6B4A",
-    marginBottom: 18,
-    textAlign: "center",
-  },
-  description: {
-    fontSize: 16,
-    color: "#425756",
-    textAlign: "center",
-    lineHeight: 24,
-    marginBottom: 32,
-    maxWidth: 360,
-  },
-  primaryButton: {
-    backgroundColor: "#143D3C",
-    paddingVertical: 16,
-    paddingHorizontal: 48,
-    borderRadius: 999,
-    marginBottom: 14,
-    width: "100%",
-    maxWidth: 340,
-    alignItems: "center",
-  },
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  secondaryButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-  },
-  secondaryButtonText: {
-    color: "#143D3C",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-});
+function createStyles(theme: AppTheme) {
+  const { colors } = theme;
+
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+
+    container: {
+      flexGrow: 1,
+      backgroundColor: colors.background,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 24,
+    },
+
+    logoCircle: {
+      width: 96,
+      height: 96,
+      borderRadius: 48,
+      backgroundColor: colors.accent,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 24,
+    },
+
+    logoText: {
+      color: colors.onAccent,
+      fontSize: 32,
+      fontWeight: "800",
+    },
+
+    title: {
+      fontSize: 42,
+      fontWeight: "800",
+      color: colors.text,
+      marginBottom: 8,
+      textAlign: "center",
+    },
+
+    tagline: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: colors.accent,
+      marginBottom: 18,
+      textAlign: "center",
+    },
+
+    description: {
+      width: "100%",
+      maxWidth: 420,
+      fontSize: 16,
+      color: colors.textSecondary,
+      textAlign: "center",
+      lineHeight: 24,
+      marginBottom: 32,
+    },
+
+    primaryButton: {
+      width: "100%",
+      maxWidth: 340,
+      minHeight: 52,
+      backgroundColor: colors.brand,
+      paddingVertical: 16,
+      paddingHorizontal: 32,
+      borderRadius: 999,
+      marginBottom: 14,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    primaryButtonText: {
+      color: colors.onBrand,
+      fontSize: 16,
+      fontWeight: "700",
+      textAlign: "center",
+    },
+
+    secondaryButton: {
+      minHeight: 48,
+      paddingVertical: 14,
+      paddingHorizontal: 24,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    secondaryButtonText: {
+      color: colors.brand,
+      fontSize: 15,
+      fontWeight: "600",
+      textAlign: "center",
+    },
+  });
+}

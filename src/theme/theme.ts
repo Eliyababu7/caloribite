@@ -16,6 +16,7 @@ export type ThemeColors = {
   placeholder: string;
   disabled: string;
   disabledText: string;
+  onAccent: string;
 };
 
 export type AppTheme = {
@@ -42,6 +43,7 @@ export const lightTheme: AppTheme = {
     placeholder: "#82908F",
     disabled: "#E6DCD6",
     disabledText: "#82908F",
+    onAccent: "#FFFFFF",
   },
 };
 
@@ -64,6 +66,7 @@ export const darkTheme: AppTheme = {
     placeholder: "#8FA5A2",
     disabled: "#29413F",
     disabledText: "#78908D",
+    onAccent: "#071716",
   },
 };
 
