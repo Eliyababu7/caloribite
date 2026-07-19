@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,19 +12,93 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useAuth } from "../context/AuthContext";
 import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
+
+function getLoginErrorMessage(code: string | undefined): string {
+  switch (code) {
+    case "invalid_credentials":
+      return "The email address or password is incorrect.";
+    case "email_not_confirmed":
+      return "Confirm your email address before logging in.";
+    case "over_request_rate_limit":
+    case "over_email_send_rate_limit":
+      return "Too many login attempts. Please wait a moment and try again.";
+    default:
+      return "We couldn't log you in. Please check your connection and try again.";
+  }
+}
 
 export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { signIn } = useAuth();
 
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const handleLogin = () => {
-    // Temporary navigation until Supabase authentication is added.
-    router.replace("/dashboard");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    setFormError(null);
+  };
+
+  const handlePasswordChange = (value: string) => {
+    setPassword(value);
+    setFormError(null);
+  };
+
+  const handleLogin = async () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    setFormError(null);
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail && !password) {
+      setFormError("Enter your email address and password.");
+      return;
+    }
+
+    if (!normalizedEmail) {
+      setFormError("Enter your email address.");
+      return;
+    }
+
+    if (!password) {
+      setFormError("Enter your password.");
+      return;
+    }
+
+    setEmail(normalizedEmail);
+    setIsSubmitting(true);
+
+    try {
+      const { data, error } = await signIn(normalizedEmail, password);
+
+      if (error) {
+        setFormError(getLoginErrorMessage(error.code));
+        return;
+      }
+
+      if (data.session) {
+        router.replace("/dashboard");
+        return;
+      }
+
+      setFormError("We couldn't start your session. Please try again.");
+    } catch {
+      setFormError("Something went wrong while logging in. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -55,7 +129,9 @@ export default function LoginScreen() {
           <Text style={styles.label}>Email address</Text>
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, isSubmitting && styles.inputDisabled]}
+            value={email}
+            onChangeText={handleEmailChange}
             placeholder="you@example.com"
             placeholderTextColor={theme.colors.placeholder}
             selectionColor={theme.colors.accent}
@@ -66,12 +142,16 @@ export default function LoginScreen() {
             textContentType="emailAddress"
             returnKeyType="next"
             accessibilityLabel="Email address"
+            accessibilityState={{ disabled: isSubmitting }}
+            editable={!isSubmitting}
           />
 
           <Text style={styles.label}>Password</Text>
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, isSubmitting && styles.inputDisabled]}
+            value={password}
+            onChangeText={handlePasswordChange}
             placeholder="Enter your password"
             placeholderTextColor={theme.colors.placeholder}
             selectionColor={theme.colors.accent}
@@ -83,35 +163,78 @@ export default function LoginScreen() {
             returnKeyType="done"
             onSubmitEditing={handleLogin}
             accessibilityLabel="Password"
+            accessibilityState={{ disabled: isSubmitting }}
+            editable={!isSubmitting}
           />
 
+          {formError ? (
+            <View
+              style={styles.errorContainer}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+            >
+              <Text style={styles.errorText}>{formError}</Text>
+            </View>
+          ) : null}
+
           <Pressable
-            style={styles.primaryButton}
+            style={[
+              styles.primaryButton,
+              isSubmitting && styles.primaryButtonDisabled,
+            ]}
             onPress={handleLogin}
+            disabled={isSubmitting}
             accessibilityRole="button"
-            accessibilityLabel="Log in"
+            accessibilityLabel={isSubmitting ? "Logging in" : "Log in"}
+            accessibilityState={{
+              busy: isSubmitting,
+              disabled: isSubmitting,
+            }}
           >
-            <Text style={styles.primaryButtonText}>Log in</Text>
+            <Text
+              style={[
+                styles.primaryButtonText,
+                isSubmitting && styles.primaryButtonTextDisabled,
+              ]}
+            >
+              {isSubmitting ? "Logging in..." : "Log in"}
+            </Text>
           </Pressable>
 
           <Pressable
             onPress={() => router.push("/signup")}
+            disabled={isSubmitting}
             accessibilityRole="button"
             accessibilityLabel="Create a CaloriBite account"
+            accessibilityState={{ disabled: isSubmitting }}
             hitSlop={8}
           >
-            <Text style={styles.linkText}>
+            <Text
+              style={[
+                styles.linkText,
+                isSubmitting && styles.secondaryActionDisabled,
+              ]}
+            >
               New to CaloriBite? Create account
             </Text>
           </Pressable>
 
           <Pressable
             onPress={() => router.back()}
+            disabled={isSubmitting}
             accessibilityRole="button"
             accessibilityLabel="Go back"
+            accessibilityState={{ disabled: isSubmitting }}
             hitSlop={8}
           >
-            <Text style={styles.backText}>Back</Text>
+            <Text
+              style={[
+                styles.backText,
+                isSubmitting && styles.secondaryActionDisabled,
+              ]}
+            >
+              Back
+            </Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -174,6 +297,28 @@ function createStyles(theme: AppTheme) {
       marginBottom: 14,
     },
 
+    inputDisabled: {
+      backgroundColor: colors.disabled,
+      color: colors.disabledText,
+    },
+
+    errorContainer: {
+      backgroundColor: colors.accentMuted,
+      borderWidth: 1,
+      borderColor: colors.danger,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      marginBottom: 14,
+    },
+
+    errorText: {
+      color: colors.danger,
+      fontSize: 14,
+      lineHeight: 20,
+      fontWeight: "600",
+    },
+
     primaryButton: {
       minHeight: 52,
       backgroundColor: colors.brand,
@@ -190,6 +335,18 @@ function createStyles(theme: AppTheme) {
       color: colors.onBrand,
       fontSize: 16,
       fontWeight: "700",
+    },
+
+    primaryButtonDisabled: {
+      backgroundColor: colors.disabled,
+    },
+
+    primaryButtonTextDisabled: {
+      color: colors.disabledText,
+    },
+
+    secondaryActionDisabled: {
+      color: colors.disabledText,
     },
 
     linkText: {
