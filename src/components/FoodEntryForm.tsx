@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -32,8 +33,9 @@ type FoodEntryFormProps = {
   initialValues?: FoodEntryInitialValues;
   submitLabel?: string;
   cancelLabel?: string;
-  onSubmit: (foodLog: NewFoodLog) => void;
+  onSubmit: (foodLog: NewFoodLog) => Promise<boolean>;
   onCancel: () => void;
+  disabled?: boolean;
 };
 
 function getInputValue(value: string | number | undefined): string {
@@ -82,6 +84,7 @@ export function FoodEntryForm({
   cancelLabel = "Back",
   onSubmit,
   onCancel,
+  disabled = false,
 }: FoodEntryFormProps) {
   const insets = useSafeAreaInsets();
   const theme = useAppTheme();
@@ -103,8 +106,15 @@ export function FoodEntryForm({
 
   const [carbs, setCarbs] = useState(getInputValue(initialValues.carbs));
   const [fat, setFat] = useState(getInputValue(initialValues.fat));
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const submissionPending = useRef(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (disabled || submissionPending.current) {
+      return;
+    }
+
     const trimmedFoodName = foodName.trim();
 
     if (!trimmedFoodName) {
@@ -136,15 +146,36 @@ export function FoodEntryForm({
       return;
     }
 
-    onSubmit({
-      foodName: trimmedFoodName,
-      calories: parsedCalories,
-      protein: parsedProtein,
-      carbs: parsedCarbs,
-      fat: parsedFat,
-      mealType,
-    });
+    submissionPending.current = true;
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const succeeded = await onSubmit({
+        foodName: trimmedFoodName,
+        calories: parsedCalories,
+        protein: parsedProtein,
+        carbs: parsedCarbs,
+        fat: parsedFat,
+        mealType,
+      });
+
+      if (!succeeded) {
+        setSubmitError(
+          "This food could not be saved. Please try again.",
+        );
+      }
+    } catch {
+      setSubmitError(
+        "This food could not be saved. Please try again.",
+      );
+    } finally {
+      submissionPending.current = false;
+      setIsSubmitting(false);
+    }
   };
+
+  const actionsDisabled = disabled || isSubmitting;
 
   return (
     <ScrollView
@@ -177,8 +208,14 @@ export function FoodEntryForm({
             return (
               <Pressable
                 key={meal}
-                style={[styles.mealChip, isSelected && styles.mealChipActive]}
+                style={[
+                  styles.mealChip,
+                  isSelected && styles.mealChipActive,
+                  actionsDisabled && styles.disabledButton,
+                ]}
                 onPress={() => setMealType(meal)}
+                disabled={actionsDisabled}
+                accessibilityState={{ disabled: actionsDisabled }}
               >
                 <Text
                   style={[
@@ -202,6 +239,7 @@ export function FoodEntryForm({
           placeholder="Food name"
           placeholderTextColor={theme.colors.placeholder}
           selectionColor={theme.colors.accent}
+          editable={!actionsDisabled}
         />
 
         <Text style={styles.label}>Calories</Text>
@@ -214,6 +252,7 @@ export function FoodEntryForm({
           placeholder="Calories"
           placeholderTextColor={theme.colors.placeholder}
           selectionColor={theme.colors.accent}
+          editable={!actionsDisabled}
         />
 
         <Text style={styles.label}>Protein (g)</Text>
@@ -226,6 +265,7 @@ export function FoodEntryForm({
           placeholder="Protein"
           placeholderTextColor={theme.colors.placeholder}
           selectionColor={theme.colors.accent}
+          editable={!actionsDisabled}
         />
 
         <Text style={styles.label}>Carbs (g)</Text>
@@ -238,6 +278,7 @@ export function FoodEntryForm({
           placeholder="Carbs"
           placeholderTextColor={theme.colors.placeholder}
           selectionColor={theme.colors.accent}
+          editable={!actionsDisabled}
         />
 
         <Text style={styles.label}>Fat (g)</Text>
@@ -250,14 +291,54 @@ export function FoodEntryForm({
           placeholder="Fat"
           placeholderTextColor={theme.colors.placeholder}
           selectionColor={theme.colors.accent}
+          editable={!actionsDisabled}
         />
 
-        <Pressable style={styles.primaryButton} onPress={handleSubmit}>
-          <Text style={styles.primaryButtonText}>{submitLabel}</Text>
+        {submitError && (
+          <Text
+            style={styles.errorText}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="assertive"
+          >
+            {submitError}
+          </Text>
+        )}
+
+        <Pressable
+          style={[
+            styles.primaryButton,
+            actionsDisabled && styles.disabledButton,
+          ]}
+          onPress={handleSubmit}
+          disabled={actionsDisabled}
+          accessibilityRole="button"
+          accessibilityLabel={submitLabel}
+          accessibilityState={{ disabled: actionsDisabled, busy: isSubmitting }}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator
+              color={theme.colors.onBrand}
+              accessibilityLabel="Saving food"
+            />
+          ) : (
+            <Text style={styles.primaryButtonText}>{submitLabel}</Text>
+          )}
         </Pressable>
 
-        <Pressable onPress={onCancel}>
-          <Text style={styles.cancelText}>{cancelLabel}</Text>
+        <Pressable
+          onPress={onCancel}
+          disabled={actionsDisabled}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: actionsDisabled }}
+        >
+          <Text
+            style={[
+              styles.cancelText,
+              actionsDisabled && styles.disabledActionText,
+            ]}
+          >
+            {cancelLabel}
+          </Text>
         </Pressable>
       </View>
     </ScrollView>
@@ -377,6 +458,21 @@ function createStyles(theme: AppTheme) {
       color: colors.onBrand,
       fontSize: 16,
       fontWeight: "700",
+    },
+
+    disabledButton: {
+      opacity: 0.6,
+    },
+
+    errorText: {
+      color: colors.danger,
+      fontSize: 15,
+      lineHeight: 22,
+      marginTop: 4,
+    },
+
+    disabledActionText: {
+      color: colors.disabledText,
     },
 
     cancelText: {

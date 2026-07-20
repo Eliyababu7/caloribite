@@ -20,7 +20,7 @@ function getParamValue(value: string | string[] | undefined): string {
 export default function ConfirmFoodScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { addFoodLog } = useFoodLogs();
+  const { addFoodLog, isFoodLogMutationPending } = useFoodLogs();
 
   const loggedDate = resolveDiaryDateParam(params.loggedDate);
 
@@ -37,15 +37,19 @@ export default function ConfirmFoodScreen() {
     fat: getParamValue(params.fat),
   };
 
-  const handleSubmit = (foodLog: NewFoodLog) => {
-    addFoodLog(foodLog, loggedDate);
+  const handleSubmit = async (foodLog: NewFoodLog) => {
+    const succeeded = await addFoodLog(foodLog, loggedDate);
 
-    router.replace({
-      pathname: "/dashboard",
-      params: {
-        loggedDate,
-      },
-    });
+    if (succeeded) {
+      router.replace({
+        pathname: "/dashboard",
+        params: {
+          loggedDate,
+        },
+      });
+    }
+
+    return succeeded;
   };
 
   return (
@@ -58,6 +62,7 @@ export default function ConfirmFoodScreen() {
       cancelLabel="Back to search"
       onSubmit={handleSubmit}
       onCancel={() => router.back()}
+      disabled={isFoodLogMutationPending}
     />
   );
 }

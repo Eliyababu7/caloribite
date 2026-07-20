@@ -42,12 +42,18 @@ export default function DashboardScreen() {
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const { foodLogs, deleteFoodLog, clearFoodLogsForDate } = useFoodLogs();
+  const {
+    foodLogs,
+    deleteFoodLog,
+    clearFoodLogsForDate,
+    isFoodLogMutationPending,
+  } = useFoodLogs();
 
   const todayDateKey = getLocalDateKey();
   const requestedDateKey = resolveDiaryDateParam(params.loggedDate);
 
   const [selectedDateKey, setSelectedDateKey] = useState(requestedDateKey);
+  const [mutationError, setMutationError] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedDateKey(requestedDateKey);
@@ -110,6 +116,11 @@ export default function DashboardScreen() {
   };
 
   const handleAddFood = () => {
+    if (isFoodLogMutationPending) {
+      return;
+    }
+
+    setMutationError(null);
     router.push({
       pathname: "/search-food",
       params: {
@@ -119,6 +130,10 @@ export default function DashboardScreen() {
   };
 
   const handleClearDay = () => {
+    if (isFoodLogMutationPending) {
+      return;
+    }
+
     Alert.alert(
       "Clear this diary day?",
       "This will permanently delete every food entry recorded for this date.",
@@ -130,10 +145,30 @@ export default function DashboardScreen() {
         {
           text: "Clear day",
           style: "destructive",
-          onPress: () => clearFoodLogsForDate(selectedDateKey),
+          onPress: async () => {
+            setMutationError(null);
+            const succeeded = await clearFoodLogsForDate(selectedDateKey);
+
+            if (!succeeded) {
+              setMutationError(
+                "This diary day could not be cleared. Please try again.",
+              );
+            }
+          },
         },
       ],
     );
+  };
+
+  const handleDeleteFood = async (id: string) => {
+    setMutationError(null);
+    const succeeded = await deleteFoodLog(id);
+
+    if (!succeeded) {
+      setMutationError(
+        "This food could not be deleted. Please try again.",
+      );
+    }
   };
 
   return (
@@ -238,12 +273,17 @@ export default function DashboardScreen() {
         </View>
 
         <Pressable
-          style={styles.primaryButton}
           onPress={handleAddFood}
+          disabled={isFoodLogMutationPending}
           accessibilityRole="button"
           accessibilityLabel={
             isViewingToday ? "Add food" : "Add food to the selected diary day"
           }
+          accessibilityState={{ disabled: isFoodLogMutationPending }}
+          style={[
+            styles.primaryButton,
+            isFoodLogMutationPending && styles.disabledButton,
+          ]}
         >
           <Text style={styles.primaryButtonText}>
             {isViewingToday ? "Add food" : "Add food to this day"}
@@ -258,14 +298,43 @@ export default function DashboardScreen() {
           {selectedFoodLogs.length > 0 && (
             <Pressable
               onPress={handleClearDay}
+              disabled={isFoodLogMutationPending}
               accessibilityRole="button"
               accessibilityLabel="Clear all food for this diary day"
               hitSlop={8}
+              accessibilityState={{ disabled: isFoodLogMutationPending }}
             >
-              <Text style={styles.clearText}>Clear day</Text>
+              <Text
+                style={[
+                  styles.clearText,
+                  isFoodLogMutationPending && styles.disabledText,
+                ]}
+              >
+                Clear day
+              </Text>
             </Pressable>
           )}
         </View>
+
+        {isFoodLogMutationPending && (
+          <Text
+            style={styles.mutationStatus}
+            accessibilityRole="progressbar"
+            accessibilityLiveRegion="polite"
+          >
+            Saving diary changes…
+          </Text>
+        )}
+
+        {mutationError && (
+          <Text
+            style={styles.mutationError}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="assertive"
+          >
+            {mutationError}
+          </Text>
+        )}
 
         {selectedFoodLogs.length === 0 ? (
           <View style={styles.emptyCard}>
@@ -281,7 +350,8 @@ export default function DashboardScreen() {
               key={mealType}
               mealType={mealType}
               foods={foodsByMeal[mealType]}
-              onDeleteFood={deleteFoodLog}
+              onDeleteFood={handleDeleteFood}
+              mutationPending={isFoodLogMutationPending}
             />
           ))
         )}
@@ -441,6 +511,28 @@ function createStyles(theme: AppTheme) {
       fontSize: 16,
       fontWeight: "700",
       textAlign: "center",
+    },
+
+    disabledButton: {
+      opacity: 0.6,
+    },
+
+    disabledText: {
+      color: colors.disabledText,
+    },
+
+    mutationStatus: {
+      color: colors.textSecondary,
+      fontSize: 14,
+      lineHeight: 20,
+      marginBottom: 14,
+    },
+
+    mutationError: {
+      color: colors.danger,
+      fontSize: 15,
+      lineHeight: 22,
+      marginBottom: 14,
     },
 
     sectionHeader: {

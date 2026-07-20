@@ -7,10 +7,11 @@ import type { FoodLog } from "../types/food";
 
 type FoodCardProps = {
   food: FoodLog;
-  onDelete: () => void;
+  onDelete: () => Promise<void>;
+  disabled?: boolean;
 };
 
-export function FoodCard({ food, onDelete }: FoodCardProps) {
+export function FoodCard({ food, onDelete, disabled = false }: FoodCardProps) {
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -32,9 +33,13 @@ export function FoodCard({ food, onDelete }: FoodCardProps) {
           accessibilityRole="button"
           accessibilityLabel={`Delete ${food.foodName}`}
           accessibilityHint="Removes this food from your diary"
+          accessibilityState={{ disabled }}
+          disabled={disabled}
           hitSlop={8}
         >
-          <Text style={styles.deleteText}>Delete</Text>
+          <Text style={[styles.deleteText, disabled && styles.disabledText]}>
+            Delete
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -92,6 +97,10 @@ function createStyles(theme: AppTheme) {
       fontSize: 13,
       fontWeight: "700",
       marginTop: 6,
+    },
+
+    disabledText: {
+      color: colors.disabledText,
     },
   });
 }

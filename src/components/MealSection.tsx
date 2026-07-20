@@ -9,13 +9,15 @@ import { FoodCard } from "./FoodCard";
 type MealSectionProps = {
   mealType: MealType;
   foods: FoodLog[];
-  onDeleteFood: (id: string) => void;
+  onDeleteFood: (id: string) => Promise<void>;
+  mutationPending?: boolean;
 };
 
 export function MealSection({
   mealType,
   foods,
   onDeleteFood,
+  mutationPending = false,
 }: MealSectionProps) {
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -49,6 +51,7 @@ export function MealSection({
             key={food.id}
             food={food}
             onDelete={() => onDeleteFood(food.id)}
+            disabled={mutationPending}
           />
         ))
       )}

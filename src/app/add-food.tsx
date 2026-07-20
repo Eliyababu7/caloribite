@@ -8,19 +8,23 @@ import { resolveDiaryDateParam } from "../utils/diaryRoute";
 export default function AddFoodScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { addFoodLog } = useFoodLogs();
+  const { addFoodLog, isFoodLogMutationPending } = useFoodLogs();
 
   const loggedDate = resolveDiaryDateParam(params.loggedDate);
 
-  const handleSubmit = (foodLog: NewFoodLog) => {
-    addFoodLog(foodLog, loggedDate);
+  const handleSubmit = async (foodLog: NewFoodLog) => {
+    const succeeded = await addFoodLog(foodLog, loggedDate);
 
-    router.replace({
-      pathname: "/dashboard",
-      params: {
-        loggedDate,
-      },
-    });
+    if (succeeded) {
+      router.replace({
+        pathname: "/dashboard",
+        params: {
+          loggedDate,
+        },
+      });
+    }
+
+    return succeeded;
   };
 
   return (
@@ -32,6 +36,7 @@ export default function AddFoodScreen() {
       cancelLabel="Back to search"
       onSubmit={handleSubmit}
       onCancel={() => router.back()}
+      disabled={isFoodLogMutationPending}
     />
   );
 }
