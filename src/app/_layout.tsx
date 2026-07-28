@@ -16,6 +16,7 @@ import {
   FoodLogProvider,
   useFoodLogs,
 } from "../context/FoodLogContext";
+import { HealthProfileProvider } from "../context/HealthProfileContext";
 import { NutritionTargetsProvider } from "../context/NutritionTargetsContext";
 import { useAppTheme } from "../theme/theme";
 
@@ -122,6 +123,7 @@ function AppNavigator() {
           <Stack.Screen name="add-food" />
           <Stack.Screen name="confirm-food" />
           <Stack.Screen name="nutrition-targets" />
+          <Stack.Screen name="health-profile" />
         </Stack.Protected>
       </Stack>
 
@@ -134,11 +136,13 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <NutritionTargetsProvider>
-          <FoodLogProvider>
-            <AppNavigator />
-          </FoodLogProvider>
-        </NutritionTargetsProvider>
+        <HealthProfileProvider>
+          <NutritionTargetsProvider>
+            <FoodLogProvider>
+              <AppNavigator />
+            </FoodLogProvider>
+          </NutritionTargetsProvider>
+        </HealthProfileProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

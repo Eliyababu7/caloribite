@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { type Href, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -312,6 +312,20 @@ export default function NutritionTargetsScreen() {
             recommendations.
           </Text>
 
+          <Pressable
+            onPress={() => router.push("/health-profile" as Href)}
+            disabled={isSaving}
+            accessibilityRole="button"
+            accessibilityLabel="Calculate nutrition targets from health profile"
+            accessibilityState={{ disabled: isSaving }}
+            style={[
+              styles.profileButton,
+              isSaving && styles.disabledControl,
+            ]}
+          >
+            <Text style={styles.profileButtonText}>Calculate from profile</Text>
+          </Pressable>
+
           {hydrationState === "loading" && (
             <Text
               style={styles.stateText}
@@ -501,7 +515,25 @@ function createStyles(theme: AppTheme) {
       color: colors.textSecondary,
       fontSize: 14,
       lineHeight: 21,
+      marginBottom: 16,
+    },
+    profileButton: {
+      minHeight: 48,
       marginBottom: 24,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surface,
+    },
+    profileButtonText: {
+      color: colors.accent,
+      fontSize: 16,
+      fontWeight: "800",
+      textAlign: "center",
     },
     form: { gap: 18 },
     field: { gap: 7 },
