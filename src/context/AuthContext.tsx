@@ -1,5 +1,4 @@
 import type {
-  AuthError,
   AuthResponse,
   AuthTokenResponsePassword,
   Session,
@@ -12,6 +11,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { AppState, Platform } from "react-native";
@@ -21,6 +21,7 @@ import { supabase } from "../services/supabase/supabaseClient";
 type AuthContextType = {
   session: Session | null;
   user: User | null;
+  authIdentity: AuthIdentity | null;
   isLoading: boolean;
   signIn: (
     email: string,
@@ -31,17 +32,58 @@ type AuthContextType = {
     email: string,
     password: string,
   ) => Promise<AuthResponse>;
-  signOut: () => Promise<{ error: AuthError | null }>;
+  signOut: () => Promise<boolean>;
+  isSigningOut: boolean;
+};
+
+export type AuthIdentity = Readonly<{
+  userId: string;
+  generation: number;
+}>;
+
+type SignOutOperation = {
+  id: symbol;
+  owner: AuthIdentity;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
+  const [authIdentity, setAuthIdentity] = useState<AuthIdentity | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const sessionRef = useRef<Session | null>(null);
+  const authIdentityRef = useRef<AuthIdentity | null>(null);
+  const authGenerationRef = useRef(0);
+  const signOutOperationRef = useRef<SignOutOperation | null>(null);
 
   useEffect(() => {
     let isMounted = true;
+
+    const publishSession = (nextSession: Session | null) => {
+      const previousUserId = sessionRef.current?.user.id ?? null;
+      const nextUserId = nextSession?.user.id ?? null;
+
+      if (previousUserId !== nextUserId) {
+        authGenerationRef.current += 1;
+
+        const nextIdentity = nextUserId
+          ? {
+              userId: nextUserId,
+              generation: authGenerationRef.current,
+            }
+          : null;
+
+        authIdentityRef.current = nextIdentity;
+        signOutOperationRef.current = null;
+        setAuthIdentity(nextIdentity);
+        setIsSigningOut(false);
+      }
+
+      sessionRef.current = nextSession;
+      setSession(nextSession);
+    };
 
     const restoreSession = async () => {
       try {
@@ -55,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (isMounted) {
-          setSession(restoredSession);
+          publishSession(restoredSession);
         }
       } catch (error) {
         console.error("Failed to restore Supabase session:", error);
@@ -72,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (isMounted) {
-        setSession(nextSession);
+        publishSession(nextSession);
         setIsLoading(false);
       }
     });
@@ -131,20 +173,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const signOut = useCallback(() => {
-    return supabase.auth.signOut();
+  const signOut = useCallback(async () => {
+    const owner = authIdentityRef.current;
+
+    if (!sessionRef.current || !owner || signOutOperationRef.current) {
+      return false;
+    }
+
+    const operation: SignOutOperation = {
+      id: Symbol("signOut"),
+      owner,
+    };
+    signOutOperationRef.current = operation;
+    setIsSigningOut(true);
+
+    try {
+      const { error } = await supabase.auth.signOut({ scope: "local" });
+      return !error;
+    } catch {
+      return false;
+    } finally {
+      const activeOperation = signOutOperationRef.current;
+      const currentIdentity = authIdentityRef.current;
+
+      if (
+        activeOperation?.id === operation.id &&
+        activeOperation.owner.userId === operation.owner.userId &&
+        activeOperation.owner.generation === operation.owner.generation &&
+        currentIdentity?.userId === operation.owner.userId &&
+        currentIdentity.generation === operation.owner.generation
+      ) {
+        signOutOperationRef.current = null;
+        setIsSigningOut(false);
+      }
+    }
   }, []);
 
   const value = useMemo<AuthContextType>(
     () => ({
       session,
       user: session?.user ?? null,
+      authIdentity,
       isLoading,
+      isSigningOut,
       signIn,
       signUp,
       signOut,
     }),
-    [isLoading, session, signIn, signOut, signUp],
+    [
+      authIdentity,
+      isLoading,
+      isSigningOut,
+      session,
+      signIn,
+      signOut,
+      signUp,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

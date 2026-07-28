@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -14,6 +14,7 @@ import { DateNavigator } from "../components/DateNavigator";
 import { MacroCard } from "../components/MacroCard";
 import { MealSection } from "../components/MealSection";
 import { ProgressBar } from "../components/ProgressBar";
+import { type AuthIdentity, useAuth } from "../context/AuthContext";
 import { useFoodLogs } from "../context/FoodLogContext";
 import {
   calculateNutritionTotals,
@@ -34,6 +35,27 @@ const DEFAULT_NUTRITION_TARGETS: NutritionTargets = {
   fat: 65,
 };
 
+type SignOutError = {
+  message: string;
+  owner: AuthIdentity;
+};
+
+function getValidFirstName(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const firstName = value.trim().split(/\s+/)[0];
+
+  if (/^(null|undefined)$/i.test(firstName)) {
+    return null;
+  }
+
+  return /^[\p{L}\p{M}][\p{L}\p{M}'’-]*$/u.test(firstName)
+    ? firstName
+    : null;
+}
+
 export default function DashboardScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -41,6 +63,9 @@ export default function DashboardScreen() {
 
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const { user, authIdentity, signOut, isSigningOut } = useAuth();
+  const authIdentityRef = useRef(authIdentity);
+  authIdentityRef.current = authIdentity;
 
   const {
     foodLogs,
@@ -54,10 +79,33 @@ export default function DashboardScreen() {
 
   const [selectedDateKey, setSelectedDateKey] = useState(requestedDateKey);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [signOutError, setSignOutError] = useState<SignOutError | null>(null);
+
+  const greetingName = useMemo(() => {
+    const metadataName = getValidFirstName(user?.user_metadata.full_name);
+
+    if (metadataName) {
+      return metadataName;
+    }
+
+    const emailName = user?.email?.split("@")[0].split(/[._-]+/)[0];
+    return getValidFirstName(emailName) ?? "there";
+  }, [user]);
+
+  const visibleSignOutError =
+    signOutError &&
+    authIdentity?.userId === signOutError.owner.userId &&
+    authIdentity.generation === signOutError.owner.generation
+      ? signOutError.message
+      : null;
 
   useEffect(() => {
     setSelectedDateKey(requestedDateKey);
   }, [requestedDateKey]);
+
+  useEffect(() => {
+    setSignOutError(null);
+  }, [authIdentity]);
 
   const isViewingToday = selectedDateKey === todayDateKey;
 
@@ -171,6 +219,42 @@ export default function DashboardScreen() {
     }
   };
 
+  const handleSignOut = async () => {
+    if (isSigningOut) {
+      return;
+    }
+
+    setSignOutError(null);
+    const initiatingIdentity = authIdentity;
+
+    try {
+      const succeeded = await signOut();
+
+      if (
+        !succeeded &&
+        initiatingIdentity &&
+        authIdentityRef.current?.userId === initiatingIdentity.userId &&
+        authIdentityRef.current.generation === initiatingIdentity.generation
+      ) {
+        setSignOutError({
+          message: "We couldn't sign you out. Please try again.",
+          owner: initiatingIdentity,
+        });
+      }
+    } catch {
+      if (
+        initiatingIdentity &&
+        authIdentityRef.current?.userId === initiatingIdentity.userId &&
+        authIdentityRef.current.generation === initiatingIdentity.generation
+      ) {
+        setSignOutError({
+          message: "We couldn't sign you out. Please try again.",
+          owner: initiatingIdentity,
+        });
+      }
+    }
+  };
+
   return (
     <ScrollView
       style={styles.screen}
@@ -183,7 +267,41 @@ export default function DashboardScreen() {
       ]}
     >
       <View style={styles.content}>
-        <Text style={styles.greeting}>Hello, Eliya 👋</Text>
+        <View style={styles.greetingRow}>
+          <Text style={styles.greeting}>Hello, {greetingName} 👋</Text>
+
+          <Pressable
+            onPress={handleSignOut}
+            disabled={isSigningOut}
+            accessibilityRole="button"
+            accessibilityLabel={isSigningOut ? "Signing out" : "Sign out"}
+            accessibilityState={{
+              busy: isSigningOut,
+              disabled: isSigningOut,
+            }}
+            hitSlop={8}
+            style={styles.signOutButton}
+          >
+            <Text
+              style={[
+                styles.signOutText,
+                isSigningOut && styles.disabledText,
+              ]}
+            >
+              {isSigningOut ? "Signing out…" : "Sign out"}
+            </Text>
+          </Pressable>
+        </View>
+
+        {visibleSignOutError && (
+          <Text
+            style={styles.signOutError}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="assertive"
+          >
+            {visibleSignOutError}
+          </Text>
+        )}
 
         <Text style={styles.title} accessibilityRole="header">
           {isViewingToday ? "Today’s progress" : "Daily progress"}
@@ -381,9 +499,38 @@ function createStyles(theme: AppTheme) {
       alignSelf: "center",
     },
 
+    greetingRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+      marginBottom: 8,
+    },
+
     greeting: {
+      flexShrink: 1,
       fontSize: 18,
       color: colors.textSecondary,
+    },
+
+    signOutText: {
+      color: colors.accent,
+      fontSize: 15,
+      fontWeight: "700",
+    },
+
+    signOutButton: {
+      minWidth: 48,
+      minHeight: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    signOutError: {
+      color: colors.danger,
+      fontSize: 14,
+      lineHeight: 20,
       marginBottom: 8,
     },
 
