@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -16,6 +16,7 @@ import { MealSection } from "../components/MealSection";
 import { ProgressBar } from "../components/ProgressBar";
 import { type AuthIdentity, useAuth } from "../context/AuthContext";
 import { useFoodLogs } from "../context/FoodLogContext";
+import { useNutritionTargets } from "../context/NutritionTargetsContext";
 import {
   calculateNutritionTotals,
   createNutritionSummary,
@@ -23,17 +24,9 @@ import {
 import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
 import type { FoodLog, MealType } from "../types/food";
-import type { NutritionTargets } from "../types/nutrition";
 import { addDaysToDateKey, getLocalDateKey } from "../utils/date";
 import { resolveDiaryDateParam } from "../utils/diaryRoute";
 import { MEAL_TYPES } from "../utils/meal";
-
-const DEFAULT_NUTRITION_TARGETS: NutritionTargets = {
-  calories: 2000,
-  protein: 120,
-  carbs: 220,
-  fat: 65,
-};
 
 type SignOutError = {
   message: string;
@@ -73,6 +66,12 @@ export default function DashboardScreen() {
     clearFoodLogsForDate,
     isFoodLogMutationPending,
   } = useFoodLogs();
+  const {
+    nutritionTargets,
+    hydrationState: targetsHydrationState,
+    hydrationError: targetsHydrationError,
+    retryHydration: retryTargetsHydration,
+  } = useNutritionTargets();
 
   const todayDateKey = getLocalDateKey();
   const requestedDateKey = resolveDiaryDateParam(params.loggedDate);
@@ -134,12 +133,9 @@ export default function DashboardScreen() {
     [selectedFoodLogs],
   );
 
-  const nutritionTargets = DEFAULT_NUTRITION_TARGETS;
-
-  const nutritionSummary = createNutritionSummary(
-    nutritionTotals,
-    nutritionTargets,
-  );
+  const nutritionSummary = nutritionTargets
+    ? createNutritionSummary(nutritionTotals, nutritionTargets)
+    : null;
 
   const handlePreviousDate = () => {
     setSelectedDateKey((currentDateKey) => {
@@ -206,6 +202,10 @@ export default function DashboardScreen() {
         },
       ],
     );
+  };
+
+  const handleEditTargets = () => {
+    router.push("/nutrition-targets" as Href);
   };
 
   const handleDeleteFood = async (id: string) => {
@@ -303,9 +303,20 @@ export default function DashboardScreen() {
           </Text>
         )}
 
-        <Text style={styles.title} accessibilityRole="header">
-          {isViewingToday ? "Today’s progress" : "Daily progress"}
-        </Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title} accessibilityRole="header">
+            {isViewingToday ? "Today’s progress" : "Daily progress"}
+          </Text>
+
+          <Pressable
+            onPress={handleEditTargets}
+            accessibilityRole="button"
+            accessibilityLabel="Edit nutrition targets"
+            style={styles.editTargetsButton}
+          >
+            <Text style={styles.editTargetsText}>Edit targets</Text>
+          </Pressable>
+        </View>
 
         <DateNavigator
           selectedDateKey={selectedDateKey}
@@ -315,7 +326,42 @@ export default function DashboardScreen() {
           onToday={handleGoToToday}
         />
 
-        <View style={styles.card}>
+        {targetsHydrationState === "loading" && (
+          <View
+            style={styles.targetsStateCard}
+            accessibilityRole="progressbar"
+            accessibilityLiveRegion="polite"
+          >
+            <Text style={styles.targetsStateText}>
+              Loading your nutrition targets…
+            </Text>
+          </View>
+        )}
+
+        {targetsHydrationState === "error" && (
+          <View style={styles.targetsStateCard}>
+            <Text
+              style={styles.targetsErrorText}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="assertive"
+            >
+              {targetsHydrationError}
+            </Text>
+
+            <Pressable
+              onPress={retryTargetsHydration}
+              accessibilityRole="button"
+              accessibilityLabel="Retry loading nutrition targets"
+              style={styles.targetsRetryButton}
+            >
+              <Text style={styles.targetsRetryText}>Retry</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {nutritionTargets && nutritionSummary && (
+          <>
+            <View style={styles.card}>
           <View style={styles.cardTopRow}>
             <View style={styles.cardLead}>
               <Text style={styles.cardLabel}>Calories consumed</Text>
@@ -365,30 +411,32 @@ export default function DashboardScreen() {
                   selectedFoodLogs.length === 1 ? "" : "s"
                 } logged ${isViewingToday ? "today" : "on this day"}.`}
           </Text>
-        </View>
+            </View>
 
-        <Text style={styles.sectionTitle}>Macro balance</Text>
+            <Text style={styles.sectionTitle}>Macro balance</Text>
 
-        <View style={styles.macroCard}>
-          <MacroCard
-            label="Protein"
-            current={nutritionTotals.protein}
-            target={nutritionTargets.protein}
-          />
+            <View style={styles.macroCard}>
+              <MacroCard
+                label="Protein"
+                current={nutritionTotals.protein}
+                target={nutritionTargets.protein}
+              />
 
-          <MacroCard
-            label="Carbs"
-            current={nutritionTotals.carbs}
-            target={nutritionTargets.carbs}
-          />
+              <MacroCard
+                label="Carbs"
+                current={nutritionTotals.carbs}
+                target={nutritionTargets.carbs}
+              />
 
-          <MacroCard
-            label="Fat"
-            current={nutritionTotals.fat}
-            target={nutritionTargets.fat}
-            style={styles.lastMacroCard}
-          />
-        </View>
+              <MacroCard
+                label="Fat"
+                current={nutritionTotals.fat}
+                target={nutritionTargets.fat}
+                style={styles.lastMacroCard}
+              />
+            </View>
+          </>
+        )}
 
         <Pressable
           onPress={handleAddFood}
@@ -534,11 +582,75 @@ function createStyles(theme: AppTheme) {
       marginBottom: 8,
     },
 
+    titleRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+      marginBottom: 24,
+    },
+
     title: {
+      flexShrink: 1,
       fontSize: 34,
       fontWeight: "800",
       color: colors.text,
-      marginBottom: 24,
+    },
+
+    editTargetsButton: {
+      minWidth: 48,
+      minHeight: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 8,
+    },
+
+    editTargetsText: {
+      color: colors.accent,
+      fontSize: 15,
+      fontWeight: "800",
+    },
+
+    targetsStateCard: {
+      minHeight: 120,
+      backgroundColor: colors.surface,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 24,
+      marginBottom: 22,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 12,
+    },
+
+    targetsStateText: {
+      color: colors.textSecondary,
+      fontSize: 15,
+      lineHeight: 22,
+      textAlign: "center",
+    },
+
+    targetsErrorText: {
+      color: colors.danger,
+      fontSize: 15,
+      lineHeight: 22,
+      textAlign: "center",
+    },
+
+    targetsRetryButton: {
+      minWidth: 96,
+      minHeight: 48,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 16,
+    },
+
+    targetsRetryText: {
+      color: colors.accent,
+      fontSize: 15,
+      fontWeight: "800",
     },
 
     card: {

@@ -16,6 +16,7 @@ import {
   FoodLogProvider,
   useFoodLogs,
 } from "../context/FoodLogContext";
+import { NutritionTargetsProvider } from "../context/NutritionTargetsContext";
 import { useAppTheme } from "../theme/theme";
 
 function LoadingScreen({ accessibilityLabel }: { accessibilityLabel: string }) {
@@ -120,6 +121,7 @@ function AppNavigator() {
           <Stack.Screen name="search-food" />
           <Stack.Screen name="add-food" />
           <Stack.Screen name="confirm-food" />
+          <Stack.Screen name="nutrition-targets" />
         </Stack.Protected>
       </Stack>
 
@@ -132,9 +134,11 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <FoodLogProvider>
-          <AppNavigator />
-        </FoodLogProvider>
+        <NutritionTargetsProvider>
+          <FoodLogProvider>
+            <AppNavigator />
+          </FoodLogProvider>
+        </NutritionTargetsProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );
