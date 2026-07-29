@@ -1,7 +1,6 @@
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -26,6 +25,7 @@ import { useAppTheme } from "../theme/theme";
 import type { FoodLog, MealType } from "../types/food";
 import { addDaysToDateKey, getLocalDateKey } from "../utils/date";
 import { resolveDiaryDateParam } from "../utils/diaryRoute";
+import { confirmAction } from "../utils/confirmAction";
 import { MEAL_TYPES } from "../utils/meal";
 
 type SignOutError = {
@@ -59,6 +59,7 @@ export default function DashboardScreen() {
   const { user, authIdentity, signOut, isSigningOut } = useAuth();
   const authIdentityRef = useRef(authIdentity);
   authIdentityRef.current = authIdentity;
+  const clearDayPendingRef = useRef(false);
 
   const {
     foodLogs,
@@ -173,35 +174,36 @@ export default function DashboardScreen() {
     });
   };
 
-  const handleClearDay = () => {
-    if (isFoodLogMutationPending) {
+  const handleClearDay = async () => {
+    if (isFoodLogMutationPending || clearDayPendingRef.current) {
       return;
     }
 
-    Alert.alert(
-      "Clear this diary day?",
-      "This will permanently delete every food entry recorded for this date.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Clear day",
-          style: "destructive",
-          onPress: async () => {
-            setMutationError(null);
-            const succeeded = await clearFoodLogsForDate(selectedDateKey);
+    const capturedDateKey = selectedDateKey;
+    clearDayPendingRef.current = true;
 
-            if (!succeeded) {
-              setMutationError(
-                "This diary day could not be cleared. Please try again.",
-              );
-            }
-          },
-        },
-      ],
-    );
+    try {
+      const confirmed = await confirmAction({
+        title: "Clear this diary day?",
+        message:
+          "This will permanently delete every food entry recorded for this date.",
+        confirmLabel: "Clear day",
+        destructive: true,
+      });
+
+      if (!confirmed) return;
+
+      setMutationError(null);
+      const succeeded = await clearFoodLogsForDate(capturedDateKey);
+
+      if (!succeeded) {
+        setMutationError(
+          "This diary day could not be cleared. Please try again.",
+        );
+      }
+    } finally {
+      clearDayPendingRef.current = false;
+    }
   };
 
   const handleEditTargets = () => {
@@ -477,12 +479,13 @@ export default function DashboardScreen() {
 
           {selectedFoodLogs.length > 0 && (
             <Pressable
-              onPress={handleClearDay}
+              onPress={() => void handleClearDay()}
               disabled={isFoodLogMutationPending}
               accessibilityRole="button"
               accessibilityLabel="Clear all food for this diary day"
               hitSlop={8}
               accessibilityState={{ disabled: isFoodLogMutationPending }}
+              style={styles.clearButton}
             >
               <Text
                 style={[
@@ -829,6 +832,14 @@ function createStyles(theme: AppTheme) {
       fontSize: 22,
       fontWeight: "800",
       color: colors.text,
+    },
+
+    clearButton: {
+      minWidth: 48,
+      minHeight: 48,
+      paddingHorizontal: 8,
+      alignItems: "center",
+      justifyContent: "center",
     },
 
     clearText: {

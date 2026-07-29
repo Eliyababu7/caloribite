@@ -1,7 +1,6 @@
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -33,57 +32,13 @@ import {
   type HealthProfile,
   type NutritionGoal,
 } from "../types/healthProfile";
+import { confirmAction } from "../utils/confirmAction";
 
 type Drafts = { age: string; heightCm: string; weightKg: string };
 type DraftField = keyof Drafts;
 type OwnedMessage = { owner: AuthIdentity; message: string };
-type ConfirmationOptions = {
-  title: string;
-  message: string;
-  confirmLabel: string;
-  destructive?: boolean;
-};
-
 const SAFETY_WORDING =
   "This estimate is for general wellness tracking and is not medical advice. It may not be suitable for people under 18, during pregnancy or breastfeeding, or for anyone with a medical condition or a history of disordered eating. Speak with a qualified healthcare professional for personalised guidance.";
-
-function confirmAction({
-  title,
-  message,
-  confirmLabel,
-  destructive = false,
-}: ConfirmationOptions): Promise<boolean> {
-  if (Platform.OS === "web") {
-    return Promise.resolve(globalThis.confirm(`${title}\n\n${message}`));
-  }
-
-  return new Promise((resolve) => {
-    let settled = false;
-    const settle = (confirmed: boolean) => {
-      if (!settled) {
-        settled = true;
-        resolve(confirmed);
-      }
-    };
-
-    Alert.alert(
-      title,
-      message,
-      [
-        { text: "Cancel", style: "cancel", onPress: () => settle(false) },
-        {
-          text: confirmLabel,
-          style: destructive ? "destructive" : "default",
-          onPress: () => settle(true),
-        },
-      ],
-      {
-        cancelable: true,
-        onDismiss: () => settle(false),
-      },
-    );
-  });
-}
 
 function identitiesMatch(
   first: AuthIdentity | null,

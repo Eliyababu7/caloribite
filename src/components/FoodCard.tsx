@@ -36,6 +36,7 @@ export function FoodCard({ food, onDelete, disabled = false }: FoodCardProps) {
           accessibilityState={{ disabled }}
           disabled={disabled}
           hitSlop={8}
+          style={styles.deleteButton}
         >
           <Text style={[styles.deleteText, disabled && styles.disabledText]}>
             Delete
@@ -92,11 +93,19 @@ function createStyles(theme: AppTheme) {
       textAlign: "right",
     },
 
+    deleteButton: {
+      minWidth: 48,
+      minHeight: 48,
+      marginTop: 6,
+      paddingHorizontal: 8,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
     deleteText: {
       color: colors.danger,
       fontSize: 13,
       fontWeight: "700",
-      marginTop: 6,
     },
 
     disabledText: {

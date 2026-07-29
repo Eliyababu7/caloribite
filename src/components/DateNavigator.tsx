@@ -54,6 +54,7 @@ export function DateNavigator({
             accessibilityRole="button"
             accessibilityLabel="Return to today"
             hitSlop={8}
+            style={styles.todayButton}
           >
             <Text style={styles.todayText}>Go to today</Text>
           </Pressable>
@@ -136,11 +137,19 @@ function createStyles(theme: AppTheme) {
       textAlign: "center",
     },
 
+    todayButton: {
+      minWidth: 48,
+      minHeight: 48,
+      marginTop: 3,
+      paddingHorizontal: 8,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
     todayText: {
       color: colors.accent,
       fontSize: 13,
       fontWeight: "700",
-      marginTop: 3,
     },
   });
 }
