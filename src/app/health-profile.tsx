@@ -211,9 +211,12 @@ export default function HealthProfileScreen() {
     healthProfile,
     hydrationState,
     hydrationError,
+    onboardingStatus,
     isSaving,
     isDeleting,
+    isOnboardingMutationPending,
     saveHealthProfile,
+    skipHealthOnboarding,
     deleteHealthProfile,
     retryHydration,
   } = useHealthProfile();
@@ -229,7 +232,7 @@ export default function HealthProfileScreen() {
   const [errors, setErrors] = useState<Partial<Record<DraftField, string>>>({});
   const [message, setMessage] = useState<OwnedMessage | null>(null);
   const initializedOwnerRef = useRef<AuthIdentity | null>(null);
-  const confirmationPendingRef = useRef(false);
+  const operationPendingRef = useRef(false);
 
   useEffect(() => {
     if (
@@ -309,7 +312,12 @@ export default function HealthProfileScreen() {
   const preview: NutritionEstimateResult | null = previewProfile
     ? estimateNutritionTargets(previewProfile)
     : null;
-  const busy = isSaving || isDeleting || targetsSaving;
+  const isOnboarding = onboardingStatus === "required";
+  const busy =
+    isSaving ||
+    isDeleting ||
+    isOnboardingMutationPending ||
+    targetsSaving;
   const visibleMessage =
     message && identitiesMatch(message.owner, authIdentity)
       ? message.message
@@ -322,43 +330,53 @@ export default function HealthProfileScreen() {
   };
 
   const handleSave = async () => {
-    if (busy || !authIdentity) return;
+    if (busy || operationPendingRef.current || !authIdentity) return;
     const profile = validate();
     if (!profile) return;
     const owner = snapshot(authIdentity);
+    const shouldFinishOnboarding = isOnboarding;
+    operationPendingRef.current = true;
     setMessage(null);
-    const saved = await saveHealthProfile(profile, owner);
-    publish(
-      owner,
-      saved
-        ? "Health profile saved. Your nutrition targets were not changed."
-        : "Your health profile could not be saved. Please try again.",
-    );
+    try {
+      const saved = await saveHealthProfile(profile, owner);
+      if (!identitiesMatch(authRef.current, owner)) return;
+      publish(
+        owner,
+        saved
+          ? "Health profile saved. Your nutrition targets were not changed."
+          : "Your health profile could not be saved. Please try again.",
+      );
+      if (saved && shouldFinishOnboarding) router.replace("/dashboard");
+    } finally {
+      operationPendingRef.current = false;
+    }
   };
 
   const applyTargets = async (
     profile: HealthProfile,
     estimate: NutritionEstimate,
     owner: AuthIdentity,
-  ) => {
+  ): Promise<boolean> => {
     const profileSaved = await saveHealthProfile(profile, owner);
     if (!profileSaved || !identitiesMatch(authRef.current, owner)) {
       publish(owner, "Your health profile could not be saved. No targets were changed.");
-      return;
+      return false;
     }
     const targetsSaved = await saveTargets(estimate.targets, owner);
+    if (!identitiesMatch(authRef.current, owner)) return false;
     publish(
       owner,
       targetsSaved
         ? "Estimated nutrition targets applied."
         : "Your estimated targets could not be applied. Please try again.",
     );
+    return targetsSaved;
   };
 
   const handleApply = async () => {
     if (
       busy ||
-      confirmationPendingRef.current ||
+      operationPendingRef.current ||
       !authIdentity ||
       !nutritionTargets ||
       !preview?.ok
@@ -370,7 +388,8 @@ export default function HealthProfileScreen() {
       ...preview.estimate,
       targets: { ...preview.estimate.targets },
     };
-    confirmationPendingRef.current = true;
+    const shouldFinishOnboarding = isOnboarding;
+    operationPendingRef.current = true;
 
     try {
       const confirmed = await confirmAction({
@@ -381,21 +400,28 @@ export default function HealthProfileScreen() {
       });
 
       if (!confirmed || !identitiesMatch(authRef.current, owner)) return;
-      await applyTargets(profile, estimate, owner);
+      const applied = await applyTargets(profile, estimate, owner);
+      if (
+        applied &&
+        shouldFinishOnboarding &&
+        identitiesMatch(authRef.current, owner)
+      ) {
+        router.replace("/dashboard");
+      }
     } finally {
-      confirmationPendingRef.current = false;
+      operationPendingRef.current = false;
     }
   };
 
   const handleDelete = async () => {
     if (
       busy ||
-      confirmationPendingRef.current ||
+      operationPendingRef.current ||
       !authIdentity ||
       !healthProfile
     ) return;
     const owner = snapshot(authIdentity);
-    confirmationPendingRef.current = true;
+    operationPendingRef.current = true;
 
     try {
       const confirmed = await confirmAction({
@@ -422,7 +448,30 @@ export default function HealthProfileScreen() {
           : "Your health profile could not be deleted. Please try again.",
       );
     } finally {
-      confirmationPendingRef.current = false;
+      operationPendingRef.current = false;
+    }
+  };
+
+  const handleSkip = async () => {
+    if (
+      busy ||
+      operationPendingRef.current ||
+      !isOnboarding ||
+      !authIdentity
+    ) return;
+    const owner = snapshot(authIdentity);
+    operationPendingRef.current = true;
+    setMessage(null);
+    try {
+      const skipped = await skipHealthOnboarding(owner);
+      if (!identitiesMatch(authRef.current, owner)) return;
+      if (skipped) {
+        router.replace("/dashboard");
+      } else {
+        publish(owner, "Your choice could not be saved. Please try again.");
+      }
+    } finally {
+      operationPendingRef.current = false;
     }
   };
 
@@ -517,18 +566,22 @@ export default function HealthProfileScreen() {
         ]}
       >
         <View style={styles.content}>
-          <Pressable
-            onPress={() => router.back()}
-            disabled={busy}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            style={styles.backButton}
-          >
-            <Text style={styles.backText}>Back</Text>
-          </Pressable>
+          {!isOnboarding && (
+            <Pressable
+              onPress={() => router.back()}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+              style={styles.backButton}
+            >
+              <Text style={styles.backText}>Back</Text>
+            </Pressable>
+          )}
           <Text style={styles.title} accessibilityRole="header">Health profile</Text>
           <Text style={styles.guidance}>
-            Add a minimal adult profile to preview personalised nutrition estimates. Saving it does not replace your nutrition targets.
+            {isOnboarding
+              ? "Optional adult health details help estimate calorie and macro targets. You can save the profile without changing your current nutrition targets, apply the estimate, or set it up later."
+              : "Add a minimal adult profile to preview personalised nutrition estimates. Saving it does not replace your nutrition targets."}
           </Text>
           <Text style={styles.safety}>{SAFETY_WORDING}</Text>
 
@@ -644,7 +697,11 @@ export default function HealthProfileScreen() {
                   style={[styles.primaryButton, busy && styles.disabled]}
                 >
                   <Text style={styles.primaryButtonText}>
-                    {isSaving ? "Saving…" : "Save health profile"}
+                    {isSaving
+                      ? "Saving…"
+                      : isOnboarding
+                        ? "Save profile without changing targets"
+                        : "Save health profile"}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -661,6 +718,25 @@ export default function HealthProfileScreen() {
                     {targetsSaving ? "Applying…" : "Apply estimated targets"}
                   </Text>
                 </Pressable>
+                {isOnboarding && (
+                  <Pressable
+                    onPress={() => void handleSkip()}
+                    disabled={busy}
+                    accessibilityRole="button"
+                    accessibilityLabel="Set up health profile later"
+                    accessibilityState={{
+                      disabled: busy,
+                      busy: isOnboardingMutationPending,
+                    }}
+                    style={[styles.skipButton, busy && styles.disabled]}
+                  >
+                    <Text style={styles.skipText}>
+                      {isOnboardingMutationPending
+                        ? "Saving…"
+                        : "Set up later."}
+                    </Text>
+                  </Pressable>
+                )}
                 {healthProfile && (
                   <Pressable
                     onPress={handleDelete}
@@ -790,6 +866,15 @@ function createStyles(theme: AppTheme) {
       paddingVertical: 12,
     },
     secondaryButtonText: { color: colors.accent, fontSize: 16, fontWeight: "800", textAlign: "center" },
+    skipButton: {
+      minHeight: 48,
+      marginTop: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+    },
+    skipText: { color: colors.accent, fontSize: 16, fontWeight: "800" },
     deleteButton: {
       minHeight: 48,
       marginTop: 12,

@@ -208,6 +208,10 @@ export default function DashboardScreen() {
     router.push("/nutrition-targets" as Href);
   };
 
+  const handleHealthProfile = () => {
+    router.push("/health-profile" as Href);
+  };
+
   const handleDeleteFood = async (id: string) => {
     setMutationError(null);
     const succeeded = await deleteFoodLog(id);
@@ -308,14 +312,24 @@ export default function DashboardScreen() {
             {isViewingToday ? "Today’s progress" : "Daily progress"}
           </Text>
 
-          <Pressable
-            onPress={handleEditTargets}
-            accessibilityRole="button"
-            accessibilityLabel="Edit nutrition targets"
-            style={styles.editTargetsButton}
-          >
-            <Text style={styles.editTargetsText}>Edit targets</Text>
-          </Pressable>
+          <View style={styles.titleActions}>
+            <Pressable
+              onPress={handleHealthProfile}
+              accessibilityRole="button"
+              accessibilityLabel="Open health profile"
+              style={styles.editTargetsButton}
+            >
+              <Text style={styles.editTargetsText}>Health profile</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleEditTargets}
+              accessibilityRole="button"
+              accessibilityLabel="Edit nutrition targets"
+              style={styles.editTargetsButton}
+            >
+              <Text style={styles.editTargetsText}>Edit targets</Text>
+            </Pressable>
+          </View>
         </View>
 
         <DateNavigator
@@ -596,6 +610,14 @@ function createStyles(theme: AppTheme) {
       fontSize: 34,
       fontWeight: "800",
       color: colors.text,
+    },
+
+    titleActions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "center",
+      justifyContent: "flex-end",
+      gap: 8,
     },
 
     editTargetsButton: {

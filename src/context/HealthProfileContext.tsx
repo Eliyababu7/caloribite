@@ -19,25 +19,46 @@ import {
 } from "../types/healthProfile";
 
 type HydrationState = "signed-out" | "loading" | "ready" | "error";
-type OwnedProfile = { owner: AuthIdentity; profile: HealthProfile | null };
-type OwnedOperation = { id: symbol; owner: AuthIdentity };
+export type HealthOnboardingStatus =
+  | "required"
+  | "completed"
+  | "skipped"
+  | null;
+type ResolvedOnboardingStatus = Exclude<HealthOnboardingStatus, null>;
+type OwnedHealthState = {
+  owner: AuthIdentity;
+  profile: HealthProfile | null;
+  onboardingStatus: ResolvedOnboardingStatus;
+};
+type OwnedOperation = { id: number; owner: AuthIdentity };
 type StoredHealthProfile = { version: 1; profile: HealthProfile };
+type StoredOnboarding = {
+  version: 1;
+  status: "completed" | "skipped";
+};
 
 type HealthProfileContextValue = {
   healthProfile: HealthProfile | null;
+  onboardingStatus: HealthOnboardingStatus;
   hydrationState: HydrationState;
   hydrationError: string | null;
   isSaving: boolean;
   isDeleting: boolean;
+  isOnboardingMutationPending: boolean;
   saveHealthProfile: (
     profile: HealthProfile,
     expectedOwner: AuthIdentity,
   ) => Promise<boolean>;
+  completeHealthOnboarding: (
+    expectedOwner: AuthIdentity,
+  ) => Promise<boolean>;
+  skipHealthOnboarding: (expectedOwner: AuthIdentity) => Promise<boolean>;
   deleteHealthProfile: (expectedOwner: AuthIdentity) => Promise<boolean>;
   retryHydration: () => void;
 };
 
-const STORAGE_KEY_PREFIX = "caloribite_health_profile:user:";
+const PROFILE_KEY_PREFIX = "caloribite_health_profile:user:";
+const ONBOARDING_KEY_PREFIX = "caloribite_health_onboarding:user:";
 const STORAGE_VERSION = 1;
 const STORAGE_ERROR =
   "Your health profile could not be loaded. Please try again.";
@@ -56,6 +77,16 @@ function identitiesMatch(
     second !== null &&
     first.userId === second.userId &&
     first.generation === second.generation
+  );
+}
+
+function operationsMatch(
+  first: OwnedOperation | null,
+  second: OwnedOperation,
+) {
+  return (
+    first?.id === second.id &&
+    identitiesMatch(first.owner, second.owner)
   );
 }
 
@@ -85,13 +116,31 @@ function isHealthProfile(value: unknown): value is HealthProfile {
   );
 }
 
-function parseStoredProfile(value: string): HealthProfile | null {
+function parseStoredProfile(value: string | null): HealthProfile | null {
+  if (value === null) return null;
   try {
     const parsed: unknown = JSON.parse(value);
     if (typeof parsed !== "object" || parsed === null) return null;
     const record = parsed as Partial<StoredHealthProfile>;
     return record.version === STORAGE_VERSION && isHealthProfile(record.profile)
       ? record.profile
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseStoredOnboarding(
+  value: string | null,
+): StoredOnboarding["status"] | null {
+  if (value === null) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const record = parsed as Partial<StoredOnboarding>;
+    return record.version === STORAGE_VERSION &&
+      (record.status === "completed" || record.status === "skipped")
+      ? record.status
       : null;
   } catch {
     return null;
@@ -113,11 +162,17 @@ async function waitForWrite(storageKey: string) {
   await writeQueues.get(storageKey)?.catch(() => undefined);
 }
 
+function storedOnboarding(status: StoredOnboarding["status"]) {
+  return JSON.stringify({ version: STORAGE_VERSION, status } satisfies StoredOnboarding);
+}
+
 export function HealthProfileProvider({ children }: { children: ReactNode }) {
   const { authIdentity } = useAuth();
   const authIdentityRef = useRef(authIdentity);
   authIdentityRef.current = authIdentity;
-  const [ownedProfile, setOwnedProfile] = useState<OwnedProfile | null>(null);
+  const [ownedState, setOwnedState] = useState<OwnedHealthState | null>(null);
+  const ownedStateRef = useRef(ownedState);
+  ownedStateRef.current = ownedState;
   const [failedOwner, setFailedOwner] = useState<AuthIdentity | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [, refreshOperationState] = useState(0);
@@ -125,41 +180,93 @@ export function HealthProfileProvider({ children }: { children: ReactNode }) {
   const loadRef = useRef<symbol | null>(null);
   const saveRef = useRef<OwnedOperation | null>(null);
   const deleteRef = useRef<OwnedOperation | null>(null);
+  const onboardingRef = useRef<OwnedOperation | null>(null);
+  const operationCounterRef = useRef(0);
+
+  const detachOwnerMismatch = (
+    operationRef: { current: OwnedOperation | null },
+  ) => {
+    if (
+      operationRef.current &&
+      !identitiesMatch(operationRef.current.owner, authIdentity)
+    ) {
+      operationRef.current = null;
+    }
+  };
+  detachOwnerMismatch(saveRef);
+  detachOwnerMismatch(deleteRef);
+  detachOwnerMismatch(onboardingRef);
+
+  const createOperation = (owner: AuthIdentity): OwnedOperation => {
+    operationCounterRef.current += 1;
+    return { id: operationCounterRef.current, owner };
+  };
 
   useEffect(() => {
     const loadId = Symbol("healthProfileLoad");
     loadRef.current = loadId;
     readyIdentityRef.current = null;
-    setOwnedProfile(null);
+    setOwnedState(null);
     setFailedOwner(null);
     if (!authIdentity) return;
 
     const owner = authIdentity;
-    const storageKey = `${STORAGE_KEY_PREFIX}${owner.userId}`;
+    const profileKey = `${PROFILE_KEY_PREFIX}${owner.userId}`;
+    const onboardingKey = `${ONBOARDING_KEY_PREFIX}${owner.userId}`;
     const load = async () => {
       try {
         if (!identitiesMatch(authIdentityRef.current, owner)) return;
-        await waitForWrite(storageKey);
+        await Promise.all([
+          waitForWrite(profileKey),
+          waitForWrite(onboardingKey),
+        ]);
         if (
           loadRef.current !== loadId ||
           !identitiesMatch(authIdentityRef.current, owner)
         ) return;
-        const stored = await AsyncStorage.getItem(storageKey);
+
+        const [profileValue, onboardingValue] = await Promise.all([
+          AsyncStorage.getItem(profileKey),
+          AsyncStorage.getItem(onboardingKey),
+        ]);
         if (
-          loadRef.current === loadId &&
-          identitiesMatch(authIdentityRef.current, owner)
-        ) {
-          readyIdentityRef.current = owner;
-          setOwnedProfile({
+          loadRef.current !== loadId ||
+          !identitiesMatch(authIdentityRef.current, owner)
+        ) return;
+
+        const profile = parseStoredProfile(profileValue);
+        let onboardingStatus = parseStoredOnboarding(onboardingValue);
+        if (!onboardingStatus && profile) {
+          setOwnedState({
             owner,
-            profile: stored === null ? null : parseStoredProfile(stored),
+            profile,
+            onboardingStatus: "completed",
           });
+          await enqueueWrite(onboardingKey, () =>
+            AsyncStorage.setItem(
+              onboardingKey,
+              storedOnboarding("completed"),
+            ),
+          );
+          if (
+            loadRef.current !== loadId ||
+            !identitiesMatch(authIdentityRef.current, owner)
+          ) return;
+          onboardingStatus = "completed";
         }
+
+        readyIdentityRef.current = owner;
+        setOwnedState({
+          owner,
+          profile,
+          onboardingStatus: onboardingStatus ?? "required",
+        });
       } catch {
         if (
           loadRef.current === loadId &&
           identitiesMatch(authIdentityRef.current, owner)
         ) {
+          readyIdentityRef.current = null;
           setFailedOwner(owner);
         }
       }
@@ -170,51 +277,70 @@ export function HealthProfileProvider({ children }: { children: ReactNode }) {
     };
   }, [authIdentity, retryCount]);
 
-  const ownsProfile = identitiesMatch(ownedProfile?.owner ?? null, authIdentity);
+  const ownsState = identitiesMatch(ownedState?.owner ?? null, authIdentity);
   const hydrationState: HydrationState =
     authIdentity === null
       ? "signed-out"
       : identitiesMatch(failedOwner, authIdentity)
         ? "error"
-        : ownsProfile
+        : ownsState && identitiesMatch(readyIdentityRef.current, authIdentity)
           ? "ready"
           : "loading";
   const activeSave = saveRef.current;
   const activeDelete = deleteRef.current;
+  const activeOnboarding = onboardingRef.current;
+
+  const canMutate = (expectedOwner: AuthIdentity) =>
+    identitiesMatch(authIdentityRef.current, expectedOwner) &&
+    identitiesMatch(readyIdentityRef.current, expectedOwner) &&
+    !identitiesMatch(saveRef.current?.owner ?? null, expectedOwner) &&
+    !identitiesMatch(deleteRef.current?.owner ?? null, expectedOwner) &&
+    !identitiesMatch(onboardingRef.current?.owner ?? null, expectedOwner);
 
   const saveHealthProfile = useCallback(async (
     profile: HealthProfile,
     expectedOwner: AuthIdentity,
   ) => {
-    if (
-      !identitiesMatch(authIdentityRef.current, expectedOwner) ||
-      !identitiesMatch(readyIdentityRef.current, expectedOwner) ||
-      !isHealthProfile(profile) ||
-      saveRef.current !== null ||
-      deleteRef.current !== null
-    ) return false;
+    if (!canMutate(expectedOwner) || !isHealthProfile(profile)) return false;
 
-    const operation = { id: Symbol("healthProfileSave"), owner: expectedOwner };
-    const storageKey = `${STORAGE_KEY_PREFIX}${expectedOwner.userId}`;
+    const operation = createOperation(expectedOwner);
+    const profileKey = `${PROFILE_KEY_PREFIX}${expectedOwner.userId}`;
+    const onboardingKey = `${ONBOARDING_KEY_PREFIX}${expectedOwner.userId}`;
     const stored: StoredHealthProfile = { version: STORAGE_VERSION, profile };
     saveRef.current = operation;
     refreshOperationState((value) => value + 1);
     try {
       if (!identitiesMatch(authIdentityRef.current, expectedOwner)) return false;
-      await enqueueWrite(storageKey, () =>
-        AsyncStorage.setItem(storageKey, JSON.stringify(stored)),
+      await enqueueWrite(profileKey, () =>
+        AsyncStorage.setItem(profileKey, JSON.stringify(stored)),
       );
       if (
-        saveRef.current?.id !== operation.id ||
+        !operationsMatch(saveRef.current, operation) ||
         !identitiesMatch(authIdentityRef.current, expectedOwner)
       ) return false;
-      setOwnedProfile({ owner: expectedOwner, profile });
+      setOwnedState((current) =>
+        identitiesMatch(current?.owner ?? null, expectedOwner)
+          ? { ...current!, profile }
+          : current,
+      );
+      await enqueueWrite(onboardingKey, () =>
+        AsyncStorage.setItem(onboardingKey, storedOnboarding("completed")),
+      );
+      if (
+        !operationsMatch(saveRef.current, operation) ||
+        !identitiesMatch(authIdentityRef.current, expectedOwner)
+      ) return false;
+      setOwnedState({
+        owner: expectedOwner,
+        profile,
+        onboardingStatus: "completed",
+      });
       setFailedOwner(null);
       return true;
     } catch {
       return false;
     } finally {
-      if (saveRef.current?.id === operation.id) {
+      if (operationsMatch(saveRef.current, operation)) {
         saveRef.current = null;
         if (identitiesMatch(authIdentityRef.current, expectedOwner)) {
           refreshOperationState((value) => value + 1);
@@ -223,34 +349,87 @@ export function HealthProfileProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const deleteHealthProfile = useCallback(async (
+  const persistOnboarding = useCallback(async (
+    status: StoredOnboarding["status"],
     expectedOwner: AuthIdentity,
   ) => {
-    if (
-      !identitiesMatch(authIdentityRef.current, expectedOwner) ||
-      !identitiesMatch(readyIdentityRef.current, expectedOwner) ||
-      saveRef.current !== null ||
-      deleteRef.current !== null
-    ) return false;
-
-    const operation = { id: Symbol("healthProfileDelete"), owner: expectedOwner };
-    const storageKey = `${STORAGE_KEY_PREFIX}${expectedOwner.userId}`;
-    deleteRef.current = operation;
+    if (!canMutate(expectedOwner)) return false;
+    const operation = createOperation(expectedOwner);
+    const onboardingKey = `${ONBOARDING_KEY_PREFIX}${expectedOwner.userId}`;
+    onboardingRef.current = operation;
     refreshOperationState((value) => value + 1);
     try {
       if (!identitiesMatch(authIdentityRef.current, expectedOwner)) return false;
-      await enqueueWrite(storageKey, () => AsyncStorage.removeItem(storageKey));
+      await enqueueWrite(onboardingKey, () =>
+        AsyncStorage.setItem(onboardingKey, storedOnboarding(status)),
+      );
       if (
-        deleteRef.current?.id !== operation.id ||
+        !operationsMatch(onboardingRef.current, operation) ||
         !identitiesMatch(authIdentityRef.current, expectedOwner)
       ) return false;
-      setOwnedProfile({ owner: expectedOwner, profile: null });
+      setOwnedState((current) =>
+        identitiesMatch(current?.owner ?? null, expectedOwner)
+          ? { ...current!, onboardingStatus: status }
+          : current,
+      );
       setFailedOwner(null);
       return true;
     } catch {
       return false;
     } finally {
-      if (deleteRef.current?.id === operation.id) {
+      if (operationsMatch(onboardingRef.current, operation)) {
+        onboardingRef.current = null;
+        if (identitiesMatch(authIdentityRef.current, expectedOwner)) {
+          refreshOperationState((value) => value + 1);
+        }
+      }
+    }
+  }, []);
+
+  const completeHealthOnboarding = useCallback(
+    (expectedOwner: AuthIdentity) => {
+      const current = ownedStateRef.current;
+      if (
+        !identitiesMatch(current?.owner ?? null, expectedOwner) ||
+        !current?.profile
+      ) return Promise.resolve(false);
+      return persistOnboarding("completed", expectedOwner);
+    },
+    [persistOnboarding],
+  );
+  const skipHealthOnboarding = useCallback(
+    (expectedOwner: AuthIdentity) =>
+      persistOnboarding("skipped", expectedOwner),
+    [persistOnboarding],
+  );
+
+  const deleteHealthProfile = useCallback(async (
+    expectedOwner: AuthIdentity,
+  ) => {
+    if (!canMutate(expectedOwner)) return false;
+
+    const operation = createOperation(expectedOwner);
+    const profileKey = `${PROFILE_KEY_PREFIX}${expectedOwner.userId}`;
+    deleteRef.current = operation;
+    refreshOperationState((value) => value + 1);
+    try {
+      if (!identitiesMatch(authIdentityRef.current, expectedOwner)) return false;
+      await enqueueWrite(profileKey, () => AsyncStorage.removeItem(profileKey));
+      if (
+        !operationsMatch(deleteRef.current, operation) ||
+        !identitiesMatch(authIdentityRef.current, expectedOwner)
+      ) return false;
+      setOwnedState((current) =>
+        identitiesMatch(current?.owner ?? null, expectedOwner)
+          ? { ...current!, profile: null }
+          : current,
+      );
+      setFailedOwner(null);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      if (operationsMatch(deleteRef.current, operation)) {
         deleteRef.current = null;
         if (identitiesMatch(authIdentityRef.current, expectedOwner)) {
           refreshOperationState((value) => value + 1);
@@ -268,7 +447,11 @@ export function HealthProfileProvider({ children }: { children: ReactNode }) {
   return (
     <HealthProfileContext.Provider
       value={{
-        healthProfile: ownsProfile ? ownedProfile!.profile : null,
+        healthProfile: ownsState ? ownedState!.profile : null,
+        onboardingStatus:
+          hydrationState === "ready" && ownsState
+            ? ownedState!.onboardingStatus
+            : null,
         hydrationState,
         hydrationError: hydrationState === "error" ? STORAGE_ERROR : null,
         isSaving:
@@ -277,7 +460,12 @@ export function HealthProfileProvider({ children }: { children: ReactNode }) {
         isDeleting:
           activeDelete !== null &&
           identitiesMatch(activeDelete.owner, authIdentity),
+        isOnboardingMutationPending:
+          activeOnboarding !== null &&
+          identitiesMatch(activeOnboarding.owner, authIdentity),
         saveHealthProfile,
+        completeHealthOnboarding,
+        skipHealthOnboarding,
         deleteHealthProfile,
         retryHydration,
       }}

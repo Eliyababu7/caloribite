@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { PasswordInput } from "../components/PasswordInput";
 import { useAuth } from "../context/AuthContext";
 import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
@@ -53,8 +54,29 @@ export default function SignupScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] =
+    useState(false);
   const [feedback, setFeedback] = useState<FormFeedback | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!password) setIsPasswordVisible(false);
+  }, [password]);
+
+  useEffect(() => {
+    if (!confirmPassword) setIsConfirmPasswordVisible(false);
+  }, [confirmPassword]);
+
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        setIsPasswordVisible(false);
+        setIsConfirmPasswordVisible(false);
+      },
+      [],
+    ),
+  );
 
   const clearFeedback = () => {
     setFeedback(null);
@@ -113,12 +135,15 @@ export default function SignupScreen() {
       }
 
       if (data.session) {
-        router.replace("/dashboard");
+        setIsPasswordVisible(false);
+        setIsConfirmPasswordVisible(false);
         return;
       }
 
       setPassword("");
       setConfirmPassword("");
+      setIsPasswordVisible(false);
+      setIsConfirmPasswordVisible(false);
       setFeedback({
         type: "success",
         message:
@@ -204,19 +229,21 @@ export default function SignupScreen() {
             editable={!isSubmitting}
           />
 
-          <Text style={styles.label}>Password</Text>
-
-          <TextInput
-            style={[styles.input, isSubmitting && styles.inputDisabled]}
+          <PasswordInput
+            label="Password"
             value={password}
             onChangeText={(value) => {
               setPassword(value);
               clearFeedback();
             }}
+            isVisible={isPasswordVisible}
+            onToggleVisibility={() =>
+              setIsPasswordVisible((visible) => !visible)
+            }
+            disabled={isSubmitting}
             placeholder="Create a password"
             placeholderTextColor={theme.colors.placeholder}
             selectionColor={theme.colors.accent}
-            secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="new-password"
@@ -224,22 +251,23 @@ export default function SignupScreen() {
             returnKeyType="next"
             accessibilityLabel="Password"
             accessibilityState={{ disabled: isSubmitting }}
-            editable={!isSubmitting}
           />
 
-          <Text style={styles.label}>Confirm password</Text>
-
-          <TextInput
-            style={[styles.input, isSubmitting && styles.inputDisabled]}
+          <PasswordInput
+            label="Confirm password"
             value={confirmPassword}
             onChangeText={(value) => {
               setConfirmPassword(value);
               clearFeedback();
             }}
+            isVisible={isConfirmPasswordVisible}
+            onToggleVisibility={() =>
+              setIsConfirmPasswordVisible((visible) => !visible)
+            }
+            disabled={isSubmitting}
             placeholder="Confirm your password"
             placeholderTextColor={theme.colors.placeholder}
             selectionColor={theme.colors.accent}
-            secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="new-password"
@@ -248,7 +276,6 @@ export default function SignupScreen() {
             onSubmitEditing={handleCreateAccount}
             accessibilityLabel="Confirm password"
             accessibilityState={{ disabled: isSubmitting }}
-            editable={!isSubmitting}
           />
 
           {feedback ? (

@@ -16,7 +16,10 @@ import {
   FoodLogProvider,
   useFoodLogs,
 } from "../context/FoodLogContext";
-import { HealthProfileProvider } from "../context/HealthProfileContext";
+import {
+  HealthProfileProvider,
+  useHealthProfile,
+} from "../context/HealthProfileContext";
 import { NutritionTargetsProvider } from "../context/NutritionTargetsContext";
 import { useAppTheme } from "../theme/theme";
 
@@ -51,17 +54,46 @@ function AppNavigator() {
     foodStorageError,
     retryFoodStorageHydration,
   } = useFoodLogs();
+  const {
+    onboardingStatus,
+    hydrationState: healthHydrationState,
+    hydrationError: healthHydrationError,
+    retryHydration: retryHealthHydration,
+  } = useHealthProfile();
   const theme = useAppTheme();
 
   if (isLoading) {
     return <LoadingScreen accessibilityLabel="Loading authentication" />;
   }
 
-  if (session && foodStorageHydrationState === "loading") {
-    return <LoadingScreen accessibilityLabel="Loading food logs" />;
+  if (
+    session &&
+    (healthHydrationState === "loading" ||
+      foodStorageHydrationState === "loading")
+  ) {
+    return (
+      <LoadingScreen
+        accessibilityLabel={
+          healthHydrationState === "loading"
+            ? "Loading health profile"
+            : "Loading food logs"
+        }
+      />
+    );
   }
 
-  if (session && foodStorageHydrationState === "error") {
+  const hydrationError =
+    healthHydrationState === "error"
+      ? healthHydrationError
+      : foodStorageHydrationState === "error"
+        ? foodStorageError
+        : null;
+  const retryHydration =
+    healthHydrationState === "error"
+      ? retryHealthHydration
+      : retryFoodStorageHydration;
+
+  if (session && hydrationError) {
     return (
       <>
         <SafeAreaView
@@ -75,13 +107,13 @@ function AppNavigator() {
             accessibilityLiveRegion="assertive"
             style={[styles.errorText, { color: theme.colors.text }]}
           >
-            {foodStorageError}
+            {hydrationError}
           </Text>
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Retry loading food logs"
-            onPress={retryFoodStorageHydration}
+            accessibilityLabel="Retry loading account data"
+            onPress={retryHydration}
             style={({ pressed }) => [
               styles.retryButton,
               { backgroundColor: theme.colors.accent },
@@ -118,11 +150,13 @@ function AppNavigator() {
         </Stack.Protected>
 
         <Stack.Protected guard={Boolean(session)}>
-          <Stack.Screen name="dashboard" />
-          <Stack.Screen name="search-food" />
-          <Stack.Screen name="add-food" />
-          <Stack.Screen name="confirm-food" />
-          <Stack.Screen name="nutrition-targets" />
+          <Stack.Protected guard={onboardingStatus !== "required"}>
+            <Stack.Screen name="dashboard" />
+            <Stack.Screen name="search-food" />
+            <Stack.Screen name="add-food" />
+            <Stack.Screen name="confirm-food" />
+            <Stack.Screen name="nutrition-targets" />
+          </Stack.Protected>
           <Stack.Screen name="health-profile" />
         </Stack.Protected>
       </Stack>

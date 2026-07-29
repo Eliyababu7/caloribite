@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { PasswordInput } from "../components/PasswordInput";
 import { useAuth } from "../context/AuthContext";
 import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
@@ -40,8 +41,22 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!password) setIsPasswordVisible(false);
+  }, [password]);
+
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        setIsPasswordVisible(false);
+      },
+      [],
+    ),
+  );
 
   const handleEmailChange = (value: string) => {
     setEmail(value);
@@ -89,7 +104,7 @@ export default function LoginScreen() {
       }
 
       if (data.session) {
-        router.replace("/dashboard");
+        setIsPasswordVisible(false);
         return;
       }
 
@@ -146,16 +161,18 @@ export default function LoginScreen() {
             editable={!isSubmitting}
           />
 
-          <Text style={styles.label}>Password</Text>
-
-          <TextInput
-            style={[styles.input, isSubmitting && styles.inputDisabled]}
+          <PasswordInput
+            label="Password"
             value={password}
             onChangeText={handlePasswordChange}
+            isVisible={isPasswordVisible}
+            onToggleVisibility={() =>
+              setIsPasswordVisible((visible) => !visible)
+            }
+            disabled={isSubmitting}
             placeholder="Enter your password"
             placeholderTextColor={theme.colors.placeholder}
             selectionColor={theme.colors.accent}
-            secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="current-password"
@@ -164,7 +181,6 @@ export default function LoginScreen() {
             onSubmitEditing={handleLogin}
             accessibilityLabel="Password"
             accessibilityState={{ disabled: isSubmitting }}
-            editable={!isSubmitting}
           />
 
           {formError ? (
