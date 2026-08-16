@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Network from "expo-network";
 import {
   createContext,
   type ReactNode,
@@ -39,6 +40,11 @@ type OwnedTargets = {
 };
 
 type SaveOperation = {
+  id: symbol;
+  owner: AuthIdentity;
+};
+
+type ReplayOperation = {
   id: symbol;
   owner: AuthIdentity;
 };
@@ -114,7 +120,14 @@ export function NutritionTargetsProvider({
   const [retryCount, setRetryCount] = useState(0);
   const [, setSaveStateVersion] = useState(0);
   const loadOperationRef = useRef<symbol | null>(null);
+  const hydrationInFlightRef = useRef<symbol | null>(null);
   const saveOperationRef = useRef<SaveOperation | null>(null);
+  const replayOperationRef = useRef<ReplayOperation | null>(null);
+  const replayRequestedRef = useRef(false);
+  const reconnectReplayRef = useRef<() => Promise<void>>(async () => undefined);
+  const networkReachabilityRef = useRef<
+    "unknown" | "unreachable" | "reachable"
+  >("unknown");
   const readyIdentityRef = useRef<AuthIdentity | null>(null);
   const storedTargetsRef = useRef<StoredNutritionTargets | null>(null);
   const repositoryRef = useRef<{
@@ -122,16 +135,132 @@ export function NutritionTargetsProvider({
     repository: NutritionTargetsRepository;
   } | null>(null);
 
+  const runDeferredReplay = () => {
+    if (replayRequestedRef.current) {
+      void reconnectReplayRef.current();
+    }
+  };
+
+  reconnectReplayRef.current = async () => {
+    const owner = authIdentityRef.current;
+    const stored = storedTargetsRef.current;
+    const ownedRepository = repositoryRef.current;
+
+    if (
+      owner === null ||
+      stored === null ||
+      stored.pendingMutation === null ||
+      !identitiesMatch(readyIdentityRef.current, owner) ||
+      !identitiesMatch(ownedRepository?.owner ?? null, owner)
+    ) {
+      replayRequestedRef.current = false;
+      return;
+    }
+
+    if (
+      hydrationInFlightRef.current !== null ||
+      identitiesMatch(saveOperationRef.current?.owner ?? null, owner) ||
+      identitiesMatch(replayOperationRef.current?.owner ?? null, owner)
+    ) {
+      return;
+    }
+
+    const operation: ReplayOperation = {
+      id: Symbol("nutritionTargetsReconnectReplay"),
+      owner,
+    };
+    const storageKey = `${STORAGE_KEY_PREFIX}${owner.userId}`;
+    const isOwnerCurrent = () =>
+      replayOperationRef.current?.id === operation.id &&
+      identitiesMatch(authIdentityRef.current, owner) &&
+      identitiesMatch(readyIdentityRef.current, owner) &&
+      identitiesMatch(repositoryRef.current?.owner ?? null, owner);
+    const persist = (nextStored: StoredNutritionTargets) =>
+      enqueueStorageWrite(storageKey, nextStored);
+
+    replayRequestedRef.current = false;
+    replayOperationRef.current = operation;
+    setSaveStateVersion((version) => version + 1);
+
+    try {
+      const result = await synchronizeNutritionTargets(
+        ownedRepository!.repository,
+        stored,
+        isOwnerCurrent,
+        persist,
+      );
+      if (!isOwnerCurrent() || result.status === "stale") return;
+
+      storedTargetsRef.current = result.stored;
+      setOwnedTargets({ owner, stored: result.stored });
+      if (result.status === "failure") {
+        setFailedOwner(owner);
+      } else if (result.status === "synced") {
+        setFailedOwner(null);
+      }
+    } catch {
+      // The durable pending mutation remains available for a later transition.
+    } finally {
+      if (replayOperationRef.current?.id === operation.id) {
+        replayOperationRef.current = null;
+        if (identitiesMatch(authIdentityRef.current, owner)) {
+          setSaveStateVersion((version) => version + 1);
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    let subscription: ReturnType<typeof Network.addNetworkStateListener> | null =
+      null;
+
+    try {
+      subscription = Network.addNetworkStateListener((state) => {
+        const previousReachability = networkReachabilityRef.current;
+        const isReachable =
+          state.isConnected === true && state.isInternetReachable !== false;
+        const isUnreachable =
+          state.isConnected === false || state.isInternetReachable === false;
+
+        if (isReachable) {
+          networkReachabilityRef.current = "reachable";
+          if (previousReachability === "unreachable") {
+            replayRequestedRef.current = true;
+            void reconnectReplayRef.current();
+          }
+        } else if (isUnreachable) {
+          networkReachabilityRef.current = "unreachable";
+        }
+      });
+    } catch {
+      subscription = null;
+    }
+
+    return () => {
+      try {
+        subscription?.remove();
+      } catch {
+        // Listener cleanup failures must not affect retained target state.
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const loadId = Symbol("nutritionTargetsLoad");
     loadOperationRef.current = loadId;
+    hydrationInFlightRef.current = loadId;
+    replayOperationRef.current = null;
+    replayRequestedRef.current = false;
     readyIdentityRef.current = null;
     storedTargetsRef.current = null;
     repositoryRef.current = null;
     setOwnedTargets(null);
     setFailedOwner(null);
 
-    if (authIdentity === null || session === null) return;
+    if (authIdentity === null || session === null) {
+      hydrationInFlightRef.current = null;
+      return;
+    }
     const owner = authIdentity;
     const repository = createNutritionTargetsRepository(session.access_token);
     const storageKey = `${STORAGE_KEY_PREFIX}${owner.userId}`;
@@ -185,6 +314,11 @@ export function NutritionTargetsProvider({
           setOwnedTargets(null);
           setFailedOwner(owner);
         }
+      } finally {
+        if (hydrationInFlightRef.current === loadId) {
+          hydrationInFlightRef.current = null;
+          runDeferredReplay();
+        }
       }
     };
 
@@ -217,8 +351,10 @@ export function NutritionTargetsProvider({
   const hydrationError =
     hydrationState === "error" ? HYDRATION_ERROR_MESSAGE : null;
   const activeSave = saveOperationRef.current;
+  const activeReplay = replayOperationRef.current;
   const isSaving =
-    activeSave !== null && identitiesMatch(activeSave.owner, authIdentity);
+    (activeSave !== null && identitiesMatch(activeSave.owner, authIdentity)) ||
+    (activeReplay !== null && identitiesMatch(activeReplay.owner, authIdentity));
 
   const retryHydration = useCallback(() => {
     if (
@@ -232,6 +368,7 @@ export function NutritionTargetsProvider({
   const saveTargets = useCallback(
     async (targets: NutritionTargets, expectedOwner: AuthIdentity) => {
       const currentSave = saveOperationRef.current;
+      const currentReplay = replayOperationRef.current;
       const currentStored = storedTargetsRef.current;
       const ownedRepository = repositoryRef.current;
       if (
@@ -240,6 +377,8 @@ export function NutritionTargetsProvider({
         !areValidNutritionTargets(targets) ||
         currentStored === null ||
         !identitiesMatch(ownedRepository?.owner ?? null, expectedOwner) ||
+        (currentReplay !== null &&
+          identitiesMatch(currentReplay.owner, expectedOwner)) ||
         (currentSave !== null &&
           identitiesMatch(currentSave.owner, expectedOwner))
       ) {
@@ -294,6 +433,7 @@ export function NutritionTargetsProvider({
             setSaveStateVersion((version) => version + 1);
           }
         }
+        runDeferredReplay();
       }
     },
     [],
