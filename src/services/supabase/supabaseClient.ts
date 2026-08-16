@@ -1,11 +1,8 @@
 import "react-native-url-polyfill/auto";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import {
-  createClient,
-  processLock,
-  type SupabaseClient,
-} from "@supabase/supabase-js";
+import { PostgrestClient } from "@supabase/postgrest-js";
+import { createClient, processLock } from "@supabase/supabase-js";
 import { Platform } from "react-native";
 
 import type { Database } from "../../types/database";
@@ -37,20 +34,16 @@ export const supabase = createClient<Database>(
   },
 );
 
-export function createSessionBoundSupabaseClient(
+export function createSessionBoundPostgrestClient(
   accessToken: string,
-): SupabaseClient<Database> {
-  return createClient<Database>(
-    configuredSupabaseUrl,
-    configuredSupabasePublishableKey,
+): PostgrestClient<Database> {
+  return new PostgrestClient<Database>(
+    `${configuredSupabaseUrl.replace(/\/$/, "")}/rest/v1`,
     {
-      global: {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      },
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-        detectSessionInUrl: false,
+      schema: "public",
+      headers: {
+        apikey: configuredSupabasePublishableKey,
+        Authorization: `Bearer ${accessToken}`,
       },
     },
   );

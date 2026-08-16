@@ -1,11 +1,11 @@
-import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
+import type { PostgrestClient, PostgrestError } from "@supabase/postgrest-js";
 
 import {
   NUTRITION_TARGET_LIMITS,
   type NutritionTargets,
 } from "../../types/nutrition";
 import type { Database } from "../../types/database";
-import { createSessionBoundSupabaseClient } from "./supabaseClient";
+import { createSessionBoundPostgrestClient } from "./supabaseClient";
 
 export type SynchronizedNutritionTargets = {
   targets: NutritionTargets;
@@ -125,18 +125,34 @@ function classifyError(error: PostgrestError): NutritionTargetsRepositoryFailure
   return { kind: "database" };
 }
 
+function classifyHttpStatus(status: number): NutritionTargetsRepositoryFailure {
+  if (status === 401 || status === 403) return { kind: "authentication" };
+  if (status === 502 || status === 503 || status === 504) {
+    return { kind: "transport" };
+  }
+  return { kind: "database" };
+}
+
 async function fetchNutritionTargets(
-  client: SupabaseClient<Database>,
+  client: PostgrestClient<Database>,
 ): Promise<FetchNutritionTargetsResult> {
   try {
-    const { data, error } = await client
+    const response = await client
       .from("nutrition_targets")
       .select("calories, protein, carbs, fat, revision, updated_at, last_mutation_id")
       .maybeSingle();
 
-    if (error) return { status: "failure", failure: classifyError(error) };
-    if (data === null) return { status: "missing" };
-    const value = mapDatabaseValue(data);
+    if (response.error) {
+      return { status: "failure", failure: classifyError(response.error) };
+    }
+    if (response.status < 200 || response.status >= 300) {
+      return {
+        status: "failure",
+        failure: classifyHttpStatus(response.status),
+      };
+    }
+    if (response.data === null) return { status: "missing" };
+    const value = mapDatabaseValue(response.data);
     return value
       ? { status: "found", value }
       : { status: "failure", failure: { kind: "validation" } };
@@ -146,7 +162,7 @@ async function fetchNutritionTargets(
 }
 
 async function applyNutritionTargets(
-  client: SupabaseClient<Database>,
+  client: PostgrestClient<Database>,
   targets: NutritionTargets,
   baseRevision: number,
   mutationId: string,
@@ -161,7 +177,7 @@ async function applyNutritionTargets(
   }
 
   try {
-    const { data, error } = await client.rpc("apply_nutrition_targets", {
+    const response = await client.rpc("apply_nutrition_targets", {
       p_base_revision: baseRevision,
       p_calories: targets.calories,
       p_carbs: targets.carbs,
@@ -170,8 +186,16 @@ async function applyNutritionTargets(
       p_protein: targets.protein,
     });
 
-    if (error) return { status: "failure", failure: classifyError(error) };
-    const value = mapDatabaseValue(data);
+    if (response.error) {
+      return { status: "failure", failure: classifyError(response.error) };
+    }
+    if (response.status < 200 || response.status >= 300) {
+      return {
+        status: "failure",
+        failure: classifyHttpStatus(response.status),
+      };
+    }
+    const value = mapDatabaseValue(response.data);
     return value
       ? { status: "applied", value }
       : { status: "failure", failure: { kind: "validation" } };
@@ -183,7 +207,7 @@ async function applyNutritionTargets(
 export function createNutritionTargetsRepository(
   accessToken: string,
 ): NutritionTargetsRepository {
-  const client = createSessionBoundSupabaseClient(accessToken);
+  const client = createSessionBoundPostgrestClient(accessToken);
   return {
     fetch: () => fetchNutritionTargets(client),
     apply: (targets, baseRevision, mutationId) =>

@@ -112,6 +112,7 @@ export function NutritionTargetsProvider({
   children: ReactNode;
 }) {
   const { authIdentity, session } = useAuth();
+  const accessToken = session?.access_token ?? null;
   const authIdentityRef = useRef(authIdentity);
   authIdentityRef.current = authIdentity;
 
@@ -257,12 +258,12 @@ export function NutritionTargetsProvider({
     setOwnedTargets(null);
     setFailedOwner(null);
 
-    if (authIdentity === null || session === null) {
+    if (authIdentity === null || accessToken === null) {
       hydrationInFlightRef.current = null;
       return;
     }
     const owner = authIdentity;
-    const repository = createNutritionTargetsRepository(session.access_token);
+    const repository = createNutritionTargetsRepository(accessToken);
     const storageKey = `${STORAGE_KEY_PREFIX}${owner.userId}`;
     const isOwnerCurrent = () =>
       loadOperationRef.current === loadId &&
@@ -328,7 +329,7 @@ export function NutritionTargetsProvider({
         loadOperationRef.current = null;
       }
     };
-  }, [authIdentity, retryCount, session]);
+  }, [accessToken, authIdentity, retryCount]);
 
   const targetsBelongToCurrentIdentity = identitiesMatch(
     ownedTargets?.owner ?? null,
