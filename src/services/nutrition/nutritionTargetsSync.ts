@@ -1,15 +1,15 @@
+import { randomUUID } from "expo-crypto";
+
+import { areValidNutritionTargets } from "../supabase/nutritionTargetsRepository";
+import type {
+  NutritionTargetsRepository,
+  NutritionTargetsRepositoryFailure,
+  SynchronizedNutritionTargets,
+} from "../supabase/nutritionTargetsRepository";
 import {
   DEFAULT_NUTRITION_TARGETS,
-  NUTRITION_TARGET_LIMITS,
   type NutritionTargets,
 } from "../../types/nutrition";
-
-export type NutritionTargetsRow = NutritionTargets & {
-  user_id: string;
-  revision: number;
-  updated_at: string;
-  last_mutation_id: string;
-};
 
 export type PendingNutritionTargetsMutation = {
   id: string;
@@ -26,47 +26,34 @@ export type StoredNutritionTargets = {
   pendingMutation: PendingNutritionTargetsMutation | null;
 };
 
-type LegacyStoredNutritionTargets = {
-  version: 1;
-  targets: NutritionTargets;
-};
+export type NutritionTargetsSyncResult =
+  | { status: "synced"; stored: StoredNutritionTargets }
+  | { status: "offline"; stored: StoredNutritionTargets }
+  | {
+      status: "failure";
+      stored: StoredNutritionTargets;
+      failure: NutritionTargetsRepositoryFailure;
+    }
+  | { status: "stale"; stored: StoredNutritionTargets };
 
-export const NUTRITION_TARGETS_STORAGE_VERSION = 2;
+type PersistStoredTargets = (stored: StoredNutritionTargets) => Promise<void>;
+
+const STORAGE_VERSION = 2;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const TIMESTAMP_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function isValidTargetValue(
-  value: unknown,
-  limits: Readonly<{ min: number; max: number }>,
-) {
-  return (
-    typeof value === "number" &&
-    Number.isFinite(value) &&
-    Number.isInteger(value) &&
-    value >= limits.min &&
-    value <= limits.max
-  );
-}
-
-export function isNutritionTargets(value: unknown): value is NutritionTargets {
-  if (!isRecord(value)) return false;
-
-  return (
-    isValidTargetValue(value.calories, NUTRITION_TARGET_LIMITS.calories) &&
-    isValidTargetValue(value.protein, NUTRITION_TARGET_LIMITS.protein) &&
-    isValidTargetValue(value.carbs, NUTRITION_TARGET_LIMITS.carbs) &&
-    isValidTargetValue(value.fat, NUTRITION_TARGET_LIMITS.fat)
-  );
-}
-
 function isRevision(value: unknown): value is number {
-  return (
-    typeof value === "number" &&
-    Number.isSafeInteger(value) &&
-    value >= 0
-  );
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value);
 }
 
 function isPendingMutation(
@@ -74,38 +61,42 @@ function isPendingMutation(
 ): value is PendingNutritionTargetsMutation {
   return (
     isRecord(value) &&
-    typeof value.id === "string" &&
-    value.id.length > 0 &&
+    isUuid(value.id) &&
     isRevision(value.baseRevision) &&
-    isNutritionTargets(value.targets)
+    areValidNutritionTargets(value.targets)
   );
 }
 
-export function createMutationId() {
-  if (typeof globalThis.crypto?.randomUUID === "function") {
-    return globalThis.crypto.randomUUID();
+function copyTargets(targets: NutritionTargets): NutritionTargets {
+  return { ...targets };
+}
+
+function targetsMatch(first: NutritionTargets, second: NutritionTargets) {
+  return (
+    first.calories === second.calories &&
+    first.protein === second.protein &&
+    first.carbs === second.carbs &&
+    first.fat === second.fat
+  );
+}
+
+function isValidStoredMetadata(
+  value: Record<string, unknown>,
+): value is Record<string, unknown> & {
+  revision: number;
+  updatedAt: string | null;
+  lastMutationId: string | null;
+} {
+  if (!isRevision(value.revision)) return false;
+  if (value.revision === 0) {
+    return value.updatedAt === null && value.lastMutationId === null;
   }
-
-  const bytes = new Uint8Array(16);
-  globalThis.crypto?.getRandomValues?.(bytes);
-
-  if (bytes.every((byte) => byte === 0)) {
-    for (let index = 0; index < bytes.length; index += 1) {
-      bytes[index] = Math.floor(Math.random() * 256);
-    }
-  }
-
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
-
-  return [
-    hex.slice(0, 4).join(""),
-    hex.slice(4, 6).join(""),
-    hex.slice(6, 8).join(""),
-    hex.slice(8, 10).join(""),
-    hex.slice(10).join(""),
-  ].join("-");
+  return (
+    typeof value.updatedAt === "string" &&
+    TIMESTAMP_PATTERN.test(value.updatedAt) &&
+    Number.isFinite(Date.parse(value.updatedAt)) &&
+    isUuid(value.lastMutationId)
+  );
 }
 
 export function createPendingMutation(
@@ -113,18 +104,18 @@ export function createPendingMutation(
   baseRevision: number,
 ): PendingNutritionTargetsMutation {
   return {
-    id: createMutationId(),
+    id: randomUUID(),
     baseRevision,
-    targets: { ...targets },
+    targets: copyTargets(targets),
   };
 }
 
 export function createStoredTargets(
-  targets: NutritionTargets = { ...DEFAULT_NUTRITION_TARGETS },
+  targets: NutritionTargets = copyTargets(DEFAULT_NUTRITION_TARGETS),
 ): StoredNutritionTargets {
   return {
-    version: NUTRITION_TARGETS_STORAGE_VERSION,
-    targets: { ...targets },
+    version: STORAGE_VERSION,
+    targets: copyTargets(targets),
     revision: 0,
     updatedAt: null,
     lastMutationId: null,
@@ -132,101 +123,164 @@ export function createStoredTargets(
   };
 }
 
+export function createPendingStoredTargets(
+  stored: StoredNutritionTargets,
+  targets: NutritionTargets,
+): StoredNutritionTargets {
+  return {
+    ...stored,
+    targets: copyTargets(targets),
+    pendingMutation: createPendingMutation(targets, stored.revision),
+  };
+}
+
 export function parseStoredTargets(savedTargets: string): StoredNutritionTargets {
   const parsed: unknown = JSON.parse(savedTargets);
-
-  if (!isRecord(parsed)) {
+  if (!isRecord(parsed) || !areValidNutritionTargets(parsed.targets)) {
     throw new Error("Invalid nutrition-target cache");
   }
 
-  const legacy = parsed as Partial<LegacyStoredNutritionTargets>;
-  if (legacy.version === 1 && isNutritionTargets(legacy.targets)) {
-    const stored = createStoredTargets(legacy.targets);
-    stored.pendingMutation = createPendingMutation(legacy.targets, 0);
+  if (parsed.version === 1) {
+    const stored = createStoredTargets(parsed.targets);
+    stored.pendingMutation = createPendingMutation(parsed.targets, 0);
     return stored;
   }
 
   if (
-    parsed.version !== NUTRITION_TARGETS_STORAGE_VERSION ||
-    !isNutritionTargets(parsed.targets) ||
-    !isRevision(parsed.revision) ||
-    !(typeof parsed.updatedAt === "string" || parsed.updatedAt === null) ||
-    !(typeof parsed.lastMutationId === "string" ||
-      parsed.lastMutationId === null) ||
-    !(parsed.pendingMutation === null ||
-      (isPendingMutation(parsed.pendingMutation) &&
-        parsed.pendingMutation.baseRevision === parsed.revision))
+    parsed.version !== STORAGE_VERSION ||
+    !isValidStoredMetadata(parsed) ||
+    !(parsed.pendingMutation === null || isPendingMutation(parsed.pendingMutation)) ||
+    (parsed.pendingMutation !== null &&
+      (parsed.pendingMutation.baseRevision !== parsed.revision ||
+        !targetsMatch(parsed.targets, parsed.pendingMutation.targets)))
   ) {
     throw new Error("Invalid nutrition-target cache");
   }
 
   return {
-    version: NUTRITION_TARGETS_STORAGE_VERSION,
-    targets: { ...parsed.targets },
+    version: STORAGE_VERSION,
+    targets: copyTargets(parsed.targets),
     revision: parsed.revision,
     updatedAt: parsed.updatedAt,
     lastMutationId: parsed.lastMutationId,
     pendingMutation: parsed.pendingMutation
       ? {
           ...parsed.pendingMutation,
-          targets: { ...parsed.pendingMutation.targets },
+          targets: copyTargets(parsed.pendingMutation.targets),
         }
       : null,
   };
 }
 
-export function parseNutritionTargetsRow(value: unknown): NutritionTargetsRow {
-  const candidate = Array.isArray(value) ? value[0] : value;
-
-  if (!isRecord(candidate) || !isNutritionTargets(candidate)) {
-    throw new Error("Invalid nutrition-target server response");
-  }
-
-  const row = candidate as Record<string, unknown> & NutritionTargets;
-  if (
-    typeof row.user_id !== "string" ||
-    !isRevision(row.revision) ||
-    row.revision < 1 ||
-    typeof row.updated_at !== "string" ||
-    typeof row.last_mutation_id !== "string"
-  ) {
-    throw new Error("Invalid nutrition-target server response");
-  }
-
+export function storeSynchronizedTargets(
+  value: SynchronizedNutritionTargets,
+): StoredNutritionTargets {
   return {
-    user_id: row.user_id,
-    calories: row.calories,
-    protein: row.protein,
-    carbs: row.carbs,
-    fat: row.fat,
-    revision: row.revision,
-    updated_at: row.updated_at,
-    last_mutation_id: row.last_mutation_id,
-  };
-}
-
-export function storeServerRow(row: NutritionTargetsRow): StoredNutritionTargets {
-  return {
-    version: NUTRITION_TARGETS_STORAGE_VERSION,
-    targets: {
-      calories: row.calories,
-      protein: row.protein,
-      carbs: row.carbs,
-      fat: row.fat,
-    },
-    revision: row.revision,
-    updatedAt: row.updated_at,
-    lastMutationId: row.last_mutation_id,
+    version: STORAGE_VERSION,
+    targets: copyTargets(value.targets),
+    revision: value.revision,
+    updatedAt: value.updatedAt,
+    lastMutationId: value.lastMutationId,
     pendingMutation: null,
   };
 }
 
-export function isConflictError(error: unknown) {
-  if (!isRecord(error)) return false;
+function preserveFailure(
+  stored: StoredNutritionTargets,
+  failure: NutritionTargetsRepositoryFailure,
+): NutritionTargetsSyncResult {
+  return failure.kind === "transport"
+    ? { status: "offline", stored }
+    : { status: "failure", stored, failure };
+}
 
-  return (
-    error.code === "40001" ||
-    (typeof error.message === "string" &&
-      error.message.includes("nutrition_targets_conflict"))
+async function applyPendingMutation(
+  repository: NutritionTargetsRepository,
+  stored: StoredNutritionTargets,
+  isOwnerCurrent: () => boolean,
+  persist: PersistStoredTargets,
+): Promise<NutritionTargetsSyncResult> {
+  const mutation = stored.pendingMutation;
+  if (!mutation || !isOwnerCurrent()) return { status: "stale", stored };
+
+  const firstApply = await repository.apply(
+    mutation.targets,
+    mutation.baseRevision,
+    mutation.id,
   );
+  if (!isOwnerCurrent()) return { status: "stale", stored };
+  if (firstApply.status === "applied") {
+    const synced = storeSynchronizedTargets(firstApply.value);
+    await persist(synced);
+    return { status: "synced", stored: synced };
+  }
+  if (firstApply.failure.kind !== "conflict") {
+    return preserveFailure(stored, firstApply.failure);
+  }
+
+  const refreshed = await repository.fetch();
+  if (!isOwnerCurrent()) return { status: "stale", stored };
+  if (refreshed.status === "failure") {
+    return preserveFailure(stored, refreshed.failure);
+  }
+  if (refreshed.status === "missing") {
+    return {
+      status: "failure",
+      stored,
+      failure: { kind: "database" },
+    };
+  }
+
+  const rebasedMutation = {
+    ...mutation,
+    baseRevision: refreshed.value.revision,
+  };
+  const rebasedStored = {
+    ...storeSynchronizedTargets(refreshed.value),
+    targets: copyTargets(mutation.targets),
+    pendingMutation: rebasedMutation,
+  };
+  await persist(rebasedStored);
+  if (!isOwnerCurrent()) return { status: "stale", stored: rebasedStored };
+
+  const secondApply = await repository.apply(
+    rebasedMutation.targets,
+    rebasedMutation.baseRevision,
+    rebasedMutation.id,
+  );
+  if (!isOwnerCurrent()) return { status: "stale", stored: rebasedStored };
+  if (secondApply.status === "failure") {
+    return preserveFailure(rebasedStored, secondApply.failure);
+  }
+
+  const synced = storeSynchronizedTargets(secondApply.value);
+  await persist(synced);
+  return { status: "synced", stored: synced };
+}
+
+export async function synchronizeNutritionTargets(
+  repository: NutritionTargetsRepository,
+  stored: StoredNutritionTargets,
+  isOwnerCurrent: () => boolean,
+  persist: PersistStoredTargets,
+): Promise<NutritionTargetsSyncResult> {
+  if (stored.pendingMutation) {
+    return applyPendingMutation(repository, stored, isOwnerCurrent, persist);
+  }
+  if (!isOwnerCurrent()) return { status: "stale", stored };
+
+  const fetched = await repository.fetch();
+  if (!isOwnerCurrent()) return { status: "stale", stored };
+  if (fetched.status === "failure") {
+    return preserveFailure(stored, fetched.failure);
+  }
+  if (fetched.status === "found") {
+    const synced = storeSynchronizedTargets(fetched.value);
+    await persist(synced);
+    return { status: "synced", stored: synced };
+  }
+
+  const pending = createPendingStoredTargets(stored, stored.targets);
+  await persist(pending);
+  return applyPendingMutation(repository, pending, isOwnerCurrent, persist);
 }

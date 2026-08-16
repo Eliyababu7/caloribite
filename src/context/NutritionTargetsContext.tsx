@@ -11,48 +11,85 @@ import {
 
 import { type AuthIdentity, useAuth } from "./AuthContext";
 import {
-  createPendingMutation,
+  createPendingStoredTargets,
   createStoredTargets,
-  isConflictError,
-  isNutritionTargets,
-  parseNutritionTargetsRow,
   parseStoredTargets,
-  storeServerRow,
-  type PendingNutritionTargetsMutation,
+  synchronizeNutritionTargets,
   type StoredNutritionTargets,
 } from "../services/nutrition/nutritionTargetsSync";
-import { supabase } from "../services/supabase/supabaseClient";
-import type { NutritionTargets } from "../types/nutrition";
+import {
+  areValidNutritionTargets,
+  createNutritionTargetsRepository,
+  type NutritionTargetsRepository,
+} from "../services/supabase/nutritionTargetsRepository";
+import {
+  DEFAULT_NUTRITION_TARGETS,
+  type NutritionTargets,
+} from "../types/nutrition";
 
-type NutritionTargetsHydrationState = "signed-out" | "loading" | "ready" | "error";
-type OwnedTargets = { owner: AuthIdentity; stored: StoredNutritionTargets };
-type SaveOperation = { id: symbol; owner: AuthIdentity };
+type NutritionTargetsHydrationState =
+  | "signed-out"
+  | "loading"
+  | "ready"
+  | "error";
+
+type OwnedTargets = {
+  owner: AuthIdentity;
+  stored: StoredNutritionTargets;
+};
+
+type SaveOperation = {
+  id: symbol;
+  owner: AuthIdentity;
+};
+
 type NutritionTargetsContextType = {
   nutritionTargets: NutritionTargets | null;
   hydrationState: NutritionTargetsHydrationState;
   hydrationError: string | null;
   isSaving: boolean;
-  saveTargets: (targets: NutritionTargets, expectedOwner: AuthIdentity) => Promise<boolean>;
+  saveTargets: (
+    targets: NutritionTargets,
+    expectedOwner: AuthIdentity,
+  ) => Promise<boolean>;
   retryHydration: () => void;
 };
 
 const STORAGE_KEY_PREFIX = "caloribite_nutrition_targets:user:";
-const HYDRATION_ERROR_MESSAGE = "Your nutrition targets could not be loaded. Please try again.";
+const HYDRATION_ERROR_MESSAGE =
+  "Your nutrition targets could not be loaded. Please try again.";
 const storageWriteQueues = new Map<string, Promise<void>>();
-const NutritionTargetsContext = createContext<NutritionTargetsContextType | undefined>(undefined);
 
-function identitiesMatch(first: AuthIdentity | null, second: AuthIdentity | null) {
-  return first !== null && second !== null &&
-    first.userId === second.userId && first.generation === second.generation;
+const NutritionTargetsContext = createContext<
+  NutritionTargetsContextType | undefined
+>(undefined);
+
+function identitiesMatch(
+  first: AuthIdentity | null,
+  second: AuthIdentity | null,
+) {
+  return (
+    first !== null &&
+    second !== null &&
+    first.userId === second.userId &&
+    first.generation === second.generation
+  );
 }
 
-function enqueueStorageWrite(storageKey: string, stored: StoredNutritionTargets) {
+function enqueueStorageWrite(
+  storageKey: string,
+  stored: StoredNutritionTargets,
+) {
   const previousWrite = storageWriteQueues.get(storageKey) ?? Promise.resolve();
-  const write = previousWrite.catch(() => undefined)
+  const write = previousWrite
+    .catch(() => undefined)
     .then(() => AsyncStorage.setItem(storageKey, JSON.stringify(stored)));
+
   storageWriteQueues.set(storageKey, write);
   const removeCompletedWrite = () => {
-    if (storageWriteQueues.get(storageKey) === write) storageWriteQueues.delete(storageKey);
+    if (storageWriteQueues.get(storageKey) === write) {
+      storageWriteQueues.delete(storageKey);
+    }
   };
   void write.then(removeCompletedWrite, removeCompletedWrite);
   return write;
@@ -63,56 +100,15 @@ async function waitForQueuedStorageWrite(storageKey: string) {
   if (queuedWrite) await queuedWrite.catch(() => undefined);
 }
 
-async function fetchServerTargets(userId: string) {
-  const { data, error } = await supabase.from("nutrition_targets")
-    .select("user_id, calories, protein, carbs, fat, revision, updated_at, last_mutation_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (error) throw error;
-  return data === null ? null : parseNutritionTargetsRow(data);
-}
-
-async function invokeApplyTargets(owner: AuthIdentity, mutation: PendingNutritionTargetsMutation) {
-  const { data, error } = await supabase.rpc("apply_nutrition_targets", {
-    p_calories: mutation.targets.calories,
-    p_protein: mutation.targets.protein,
-    p_carbs: mutation.targets.carbs,
-    p_fat: mutation.targets.fat,
-    p_base_revision: mutation.baseRevision,
-    p_mutation_id: mutation.id,
-  });
-  if (error) throw error;
-  const row = parseNutritionTargetsRow(data);
-  if (row.user_id !== owner.userId) {
-    throw new Error("Nutrition-target server response has the wrong owner");
-  }
-  return row;
-}
-
-async function applyWithConflictRetry(
-  owner: AuthIdentity,
-  mutation: PendingNutritionTargetsMutation,
-  storageKey: string,
-) {
-  try {
-    return await invokeApplyTargets(owner, mutation);
-  } catch (error) {
-    if (!isConflictError(error)) throw error;
-    const latest = await fetchServerTargets(owner.userId);
-    if (latest === null) throw error;
-    const rebasedMutation = { ...mutation, baseRevision: latest.revision };
-    const pendingStored = storeServerRow(latest);
-    pendingStored.targets = { ...mutation.targets };
-    pendingStored.pendingMutation = rebasedMutation;
-    await enqueueStorageWrite(storageKey, pendingStored);
-    return invokeApplyTargets(owner, rebasedMutation);
-  }
-}
-
-export function NutritionTargetsProvider({ children }: { children: ReactNode }) {
-  const { authIdentity } = useAuth();
+export function NutritionTargetsProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const { authIdentity, session } = useAuth();
   const authIdentityRef = useRef(authIdentity);
   authIdentityRef.current = authIdentity;
+
   const [ownedTargets, setOwnedTargets] = useState<OwnedTargets | null>(null);
   const [failedOwner, setFailedOwner] = useState<AuthIdentity | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -121,24 +117,36 @@ export function NutritionTargetsProvider({ children }: { children: ReactNode }) 
   const saveOperationRef = useRef<SaveOperation | null>(null);
   const readyIdentityRef = useRef<AuthIdentity | null>(null);
   const storedTargetsRef = useRef<StoredNutritionTargets | null>(null);
+  const repositoryRef = useRef<{
+    owner: AuthIdentity;
+    repository: NutritionTargetsRepository;
+  } | null>(null);
 
   useEffect(() => {
     const loadId = Symbol("nutritionTargetsLoad");
     loadOperationRef.current = loadId;
     readyIdentityRef.current = null;
     storedTargetsRef.current = null;
+    repositoryRef.current = null;
     setOwnedTargets(null);
     setFailedOwner(null);
-    if (authIdentity === null) return;
+
+    if (authIdentity === null || session === null) return;
     const owner = authIdentity;
+    const repository = createNutritionTargetsRepository(session.access_token);
     const storageKey = `${STORAGE_KEY_PREFIX}${owner.userId}`;
+    const isOwnerCurrent = () =>
+      loadOperationRef.current === loadId &&
+      identitiesMatch(authIdentityRef.current, owner);
+    const persist = (stored: StoredNutritionTargets) =>
+      enqueueStorageWrite(storageKey, stored);
 
     const publishReady = (stored: StoredNutritionTargets) => {
-      if (loadOperationRef.current === loadId && identitiesMatch(authIdentityRef.current, owner)) {
-        readyIdentityRef.current = owner;
-        storedTargetsRef.current = stored;
-        setOwnedTargets({ owner, stored });
-      }
+      if (!isOwnerCurrent()) return;
+      readyIdentityRef.current = owner;
+      storedTargetsRef.current = stored;
+      repositoryRef.current = { owner, repository };
+      setOwnedTargets({ owner, stored });
     };
 
     const loadTargets = async () => {
@@ -146,100 +154,173 @@ export function NutritionTargetsProvider({ children }: { children: ReactNode }) 
         await waitForQueuedStorageWrite(storageKey);
         const savedTargets = await AsyncStorage.getItem(storageKey);
         let stored = createStoredTargets();
+
         if (savedTargets !== null) {
-          try { stored = parseStoredTargets(savedTargets); } catch { stored = createStoredTargets(); }
+          try {
+            stored = parseStoredTargets(savedTargets);
+          } catch {
+            stored = createStoredTargets();
+          }
         }
-        const serverTargets = await fetchServerTargets(owner.userId);
-        if (stored.pendingMutation) {
-          stored = storeServerRow(await applyWithConflictRetry(owner, stored.pendingMutation, storageKey));
-        } else if (serverTargets) {
-          stored = storeServerRow(serverTargets);
-        } else {
-          const mutation = createPendingMutation(stored.targets, 0);
-          stored.pendingMutation = mutation;
-          await enqueueStorageWrite(storageKey, stored);
-          stored = storeServerRow(await applyWithConflictRetry(owner, mutation, storageKey));
-        }
-        await enqueueStorageWrite(storageKey, stored);
+
         publishReady(stored);
+        const result = await synchronizeNutritionTargets(
+          repository,
+          stored,
+          isOwnerCurrent,
+          persist,
+        );
+        if (!isOwnerCurrent() || result.status === "stale") return;
+
+        publishReady(result.stored);
+        if (result.status === "failure") {
+          setFailedOwner(owner);
+        } else {
+          setFailedOwner(null);
+        }
       } catch {
-        if (loadOperationRef.current === loadId && identitiesMatch(authIdentityRef.current, owner)) {
+        if (isOwnerCurrent()) {
           readyIdentityRef.current = null;
           storedTargetsRef.current = null;
+          setOwnedTargets(null);
           setFailedOwner(owner);
         }
       }
     };
+
     void loadTargets();
     return () => {
-      if (loadOperationRef.current === loadId) loadOperationRef.current = null;
+      if (loadOperationRef.current === loadId) {
+        loadOperationRef.current = null;
+      }
     };
-  }, [authIdentity, retryCount]);
+  }, [authIdentity, retryCount, session]);
 
-  const targetsBelongToCurrentIdentity = identitiesMatch(ownedTargets?.owner ?? null, authIdentity);
-  const nutritionTargets = targetsBelongToCurrentIdentity ? ownedTargets!.stored.targets : null;
-  const hydrationState: NutritionTargetsHydrationState = authIdentity === null ? "signed-out"
-    : identitiesMatch(failedOwner, authIdentity) ? "error"
-      : targetsBelongToCurrentIdentity ? "ready" : "loading";
-  const hydrationError = hydrationState === "error" ? HYDRATION_ERROR_MESSAGE : null;
+  const targetsBelongToCurrentIdentity = identitiesMatch(
+    ownedTargets?.owner ?? null,
+    authIdentity,
+  );
+  const nutritionTargets =
+    authIdentity === null
+      ? { ...DEFAULT_NUTRITION_TARGETS }
+      : targetsBelongToCurrentIdentity
+        ? ownedTargets!.stored.targets
+        : null;
+  const hydrationState: NutritionTargetsHydrationState =
+    authIdentity === null
+      ? "signed-out"
+      : identitiesMatch(failedOwner, authIdentity)
+        ? "error"
+        : targetsBelongToCurrentIdentity
+          ? "ready"
+          : "loading";
+  const hydrationError =
+    hydrationState === "error" ? HYDRATION_ERROR_MESSAGE : null;
   const activeSave = saveOperationRef.current;
-  const isSaving = activeSave !== null && identitiesMatch(activeSave.owner, authIdentity);
+  const isSaving =
+    activeSave !== null && identitiesMatch(activeSave.owner, authIdentity);
 
   const retryHydration = useCallback(() => {
-    if (authIdentityRef.current !== null && identitiesMatch(failedOwner, authIdentityRef.current)) {
+    if (
+      authIdentityRef.current !== null &&
+      identitiesMatch(failedOwner, authIdentityRef.current)
+    ) {
       setRetryCount((count) => count + 1);
     }
   }, [failedOwner]);
 
-  const saveTargets = useCallback(async (targets: NutritionTargets, expectedOwner: AuthIdentity) => {
-    const currentSave = saveOperationRef.current;
-    const currentStored = storedTargetsRef.current;
-    if (!identitiesMatch(authIdentityRef.current, expectedOwner) ||
-      !identitiesMatch(readyIdentityRef.current, expectedOwner) ||
-      !isNutritionTargets(targets) || currentStored === null ||
-      (currentSave !== null && identitiesMatch(currentSave.owner, expectedOwner))) return false;
+  const saveTargets = useCallback(
+    async (targets: NutritionTargets, expectedOwner: AuthIdentity) => {
+      const currentSave = saveOperationRef.current;
+      const currentStored = storedTargetsRef.current;
+      const ownedRepository = repositoryRef.current;
+      if (
+        !identitiesMatch(authIdentityRef.current, expectedOwner) ||
+        !identitiesMatch(readyIdentityRef.current, expectedOwner) ||
+        !areValidNutritionTargets(targets) ||
+        currentStored === null ||
+        !identitiesMatch(ownedRepository?.owner ?? null, expectedOwner) ||
+        (currentSave !== null &&
+          identitiesMatch(currentSave.owner, expectedOwner))
+      ) {
+        return false;
+      }
 
-    const operation: SaveOperation = { id: Symbol("nutritionTargetsSave"), owner: expectedOwner };
-    const storageKey = `${STORAGE_KEY_PREFIX}${expectedOwner.userId}`;
-    const mutation = createPendingMutation(targets, currentStored.revision);
-    const pendingStored: StoredNutritionTargets = {
-      ...currentStored,
-      targets: { ...targets },
-      pendingMutation: mutation,
-    };
-    saveOperationRef.current = operation;
-    setSaveStateVersion((version) => version + 1);
-    try {
-      await enqueueStorageWrite(storageKey, pendingStored);
-      const syncedStored = storeServerRow(
-        await applyWithConflictRetry(expectedOwner, mutation, storageKey),
-      );
-      await enqueueStorageWrite(storageKey, syncedStored);
-      if (saveOperationRef.current?.id !== operation.id ||
-        !identitiesMatch(authIdentityRef.current, expectedOwner)) return false;
-      storedTargetsRef.current = syncedStored;
-      setOwnedTargets({ owner: expectedOwner, stored: syncedStored });
-      setFailedOwner(null);
-      return true;
-    } catch {
-      return false;
-    } finally {
-      if (saveOperationRef.current?.id === operation.id) {
-        saveOperationRef.current = null;
-        if (identitiesMatch(authIdentityRef.current, expectedOwner)) {
-          setSaveStateVersion((version) => version + 1);
+      const operation: SaveOperation = {
+        id: Symbol("nutritionTargetsSave"),
+        owner: expectedOwner,
+      };
+      const storageKey = `${STORAGE_KEY_PREFIX}${expectedOwner.userId}`;
+      const pendingStored = createPendingStoredTargets(currentStored, targets);
+      const isOwnerCurrent = () =>
+        saveOperationRef.current?.id === operation.id &&
+        identitiesMatch(authIdentityRef.current, expectedOwner);
+      const persist = (stored: StoredNutritionTargets) =>
+        enqueueStorageWrite(storageKey, stored);
+
+      loadOperationRef.current = null;
+      saveOperationRef.current = operation;
+      setSaveStateVersion((version) => version + 1);
+
+      try {
+        await persist(pendingStored);
+        if (!isOwnerCurrent()) return false;
+
+        storedTargetsRef.current = pendingStored;
+        setOwnedTargets({ owner: expectedOwner, stored: pendingStored });
+        const result = await synchronizeNutritionTargets(
+          ownedRepository!.repository,
+          pendingStored,
+          isOwnerCurrent,
+          persist,
+        );
+        if (!isOwnerCurrent() || result.status === "stale") return false;
+
+        storedTargetsRef.current = result.stored;
+        setOwnedTargets({ owner: expectedOwner, stored: result.stored });
+        if (result.status === "failure") {
+          setFailedOwner(expectedOwner);
+          return false;
+        }
+
+        setFailedOwner(null);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        if (saveOperationRef.current?.id === operation.id) {
+          saveOperationRef.current = null;
+          if (identitiesMatch(authIdentityRef.current, expectedOwner)) {
+            setSaveStateVersion((version) => version + 1);
+          }
         }
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
-  return <NutritionTargetsContext.Provider value={{
-    nutritionTargets, hydrationState, hydrationError, isSaving, saveTargets, retryHydration,
-  }}>{children}</NutritionTargetsContext.Provider>;
+  return (
+    <NutritionTargetsContext.Provider
+      value={{
+        nutritionTargets,
+        hydrationState,
+        hydrationError,
+        isSaving,
+        saveTargets,
+        retryHydration,
+      }}
+    >
+      {children}
+    </NutritionTargetsContext.Provider>
+  );
 }
 
 export function useNutritionTargets() {
   const context = useContext(NutritionTargetsContext);
-  if (!context) throw new Error("useNutritionTargets must be used inside NutritionTargetsProvider");
+  if (!context) {
+    throw new Error(
+      "useNutritionTargets must be used inside NutritionTargetsProvider",
+    );
+  }
   return context;
 }
