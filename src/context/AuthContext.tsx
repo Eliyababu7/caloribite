@@ -1,6 +1,7 @@
 import type {
   AuthResponse,
   AuthTokenResponsePassword,
+  AuthOtpResponse,
   Session,
   User,
 } from "@supabase/supabase-js";
@@ -32,6 +33,8 @@ type AuthContextType = {
     email: string,
     password: string,
   ) => Promise<AuthResponse>;
+  verifySignupCode: (email: string, token: string) => Promise<AuthResponse>;
+  resendSignupCode: (email: string) => Promise<AuthOtpResponse>;
   signOut: () => Promise<boolean>;
   isSigningOut: boolean;
 };
@@ -173,6 +176,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const verifySignupCode = useCallback((email: string, token: string) => {
+    return supabase.auth.verifyOtp({
+      email,
+      token,
+      type: "email",
+    });
+  }, []);
+
+  const resendSignupCode = useCallback((email: string) => {
+    return supabase.auth.resend({
+      email,
+      type: "signup",
+    });
+  }, []);
+
   const signOut = useCallback(async () => {
     const owner = authIdentityRef.current;
 
@@ -218,6 +236,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isSigningOut,
       signIn,
       signUp,
+      verifySignupCode,
+      resendSignupCode,
       signOut,
     }),
     [
@@ -225,9 +245,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       isSigningOut,
       session,
+      resendSignupCode,
       signIn,
       signOut,
       signUp,
+      verifySignupCode,
     ],
   );
 

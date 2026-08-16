@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -44,6 +44,7 @@ function getSignupErrorMessage(code: string | undefined): string {
 
 export default function SignupScreen() {
   const router = useRouter();
+  const { verification } = useLocalSearchParams<{ verification?: string }>();
   const insets = useSafeAreaInsets();
   const { signUp } = useAuth();
 
@@ -59,6 +60,15 @@ export default function SignupScreen() {
     useState(false);
   const [feedback, setFeedback] = useState<FormFeedback | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (verification === "missing-email") {
+      setFeedback({
+        type: "error",
+        message: "Enter your email address to request a new verification code.",
+      });
+    }
+  }, [verification]);
 
   useEffect(() => {
     if (!password) setIsPasswordVisible(false);
@@ -140,14 +150,11 @@ export default function SignupScreen() {
         return;
       }
 
-      setPassword("");
-      setConfirmPassword("");
       setIsPasswordVisible(false);
       setIsConfirmPasswordVisible(false);
-      setFeedback({
-        type: "success",
-        message:
-          "Please check your inbox. If this address is eligible for registration, you'll receive confirmation instructions shortly.",
+      router.replace({
+        pathname: "/verify-email",
+        params: { email: normalizedEmail },
       });
     } catch {
       setFeedback({
