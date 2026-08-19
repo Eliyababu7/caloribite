@@ -214,6 +214,9 @@ export default function HealthProfileScreen() {
     ) {
       initializedOwnerRef.current = null;
       setDrafts(createDrafts(null));
+      setCalculationSex("prefer-not-to-say");
+      setActivityLevel("sedentary");
+      setGoal("maintain");
       setErrors({});
       setMessage(null);
     }
@@ -430,6 +433,17 @@ export default function HealthProfileScreen() {
     }
   };
 
+  const handleBack = () => {
+    if (isOnboarding) return;
+
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace("/dashboard");
+  };
+
   const field = (
     key: DraftField,
     label: string,
@@ -438,7 +452,6 @@ export default function HealthProfileScreen() {
     allowDecimal = false,
   ) => {
     const error = errors[key];
-    const inputId = `health-profile-${key}-input`;
     const labelId = `health-profile-${key}-label`;
     const guidanceId = `health-profile-${key}-guidance`;
     const errorId = `health-profile-${key}-error`;
@@ -466,7 +479,6 @@ export default function HealthProfileScreen() {
           {label} ({unit})
         </Text>
         <TextInput
-          nativeID={inputId}
           value={drafts[key]}
           onChangeText={(value) => {
             setDrafts((current) => ({ ...current, [key]: value }));
@@ -476,6 +488,8 @@ export default function HealthProfileScreen() {
           editable={!busy}
           keyboardType={allowDecimal ? "decimal-pad" : "number-pad"}
           inputMode={allowDecimal ? "decimal" : "numeric"}
+          autoComplete="off"
+          importantForAutofill="no"
           maxLength={allowDecimal ? 6 : 3}
           accessibilityLabel={`${label} in ${unit}`}
           accessibilityHint={accessibilityHint}
@@ -523,7 +537,7 @@ export default function HealthProfileScreen() {
         <View style={styles.content}>
           {!isOnboarding && (
             <Pressable
-              onPress={() => router.back()}
+              onPress={handleBack}
               disabled={busy}
               accessibilityRole="button"
               accessibilityLabel="Go back"
