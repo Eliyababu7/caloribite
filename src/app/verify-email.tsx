@@ -16,7 +16,7 @@ import { useAuth } from "../context/AuthContext";
 import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
 
-const CODE_LENGTH = 6;
+const EMAIL_VERIFICATION_CODE_LENGTH = 8;
 const RESEND_COOLDOWN_SECONDS = 60;
 
 function getVerificationErrorMessage(code: string | undefined): string {
@@ -82,12 +82,22 @@ export default function VerifyEmailScreen() {
   }, [cooldown]);
 
   const handleCodeChange = (value: string) => {
-    setCode(value.replace(/\D/g, "").slice(0, CODE_LENGTH));
+    setCode(
+      value
+        .replace(/\D/g, "")
+        .slice(0, EMAIL_VERIFICATION_CODE_LENGTH),
+    );
     setFeedback(null);
   };
 
   const handleVerify = async () => {
-    if (!email || code.length !== CODE_LENGTH || verifyInFlightRef.current) return;
+    if (
+      !email ||
+      code.length !== EMAIL_VERIFICATION_CODE_LENGTH ||
+      verifyInFlightRef.current
+    ) {
+      return;
+    }
 
     verifyInFlightRef.current = true;
     setIsVerifying(true);
@@ -143,7 +153,7 @@ export default function VerifyEmailScreen() {
   if (!email) return null;
 
   const isBusy = isVerifying || isResending;
-  const canVerify = code.length === CODE_LENGTH && !isBusy;
+  const canVerify = code.length === EMAIL_VERIFICATION_CODE_LENGTH && !isBusy;
   const canResend = cooldown === 0 && !isBusy;
 
   return (
@@ -168,7 +178,7 @@ export default function VerifyEmailScreen() {
           </Text>
 
           <Text style={styles.subtitle}>
-            Enter the six-digit code sent to{" "}
+            Enter the {EMAIL_VERIFICATION_CODE_LENGTH}-digit code sent to{" "}
             <Text style={styles.email}>{email}</Text>.
           </Text>
 
@@ -178,20 +188,20 @@ export default function VerifyEmailScreen() {
             style={[styles.codeInput, isBusy && styles.inputDisabled]}
             value={code}
             onChangeText={handleCodeChange}
-            placeholder="000000"
+            placeholder={"0".repeat(EMAIL_VERIFICATION_CODE_LENGTH)}
             placeholderTextColor={theme.colors.placeholder}
             selectionColor={theme.colors.accent}
             keyboardType="number-pad"
             inputMode="numeric"
-            maxLength={CODE_LENGTH}
+            maxLength={EMAIL_VERIFICATION_CODE_LENGTH}
             autoComplete="one-time-code"
             textContentType="oneTimeCode"
             returnKeyType="done"
             onSubmitEditing={handleVerify}
             autoFocus
             editable={!isBusy}
-            accessibilityLabel="Six-digit verification code"
-            accessibilityHint="Enter or paste the code from your email"
+            accessibilityLabel={`${EMAIL_VERIFICATION_CODE_LENGTH}-digit verification code`}
+            accessibilityHint={`Enter or paste all ${EMAIL_VERIFICATION_CODE_LENGTH} digits from your email`}
             accessibilityState={{ disabled: isBusy }}
           />
 
