@@ -16,15 +16,17 @@ import { PasswordInput } from "../components/PasswordInput";
 import { useAuth } from "../context/AuthContext";
 import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
+import {
+  isValidEmail,
+  normalizeEmail,
+  passwordsMatch,
+  validateNewPassword,
+} from "../utils/authValidation";
 
 type FormFeedback = {
   type: "error" | "success";
   message: string;
 };
-
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
 
 function getSignupErrorMessage(code: string | undefined): string {
   switch (code) {
@@ -100,7 +102,7 @@ export default function SignupScreen() {
     setFeedback(null);
 
     const normalizedFullName = fullName.trim();
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(email);
 
     if (!normalizedFullName) {
       setFeedback({ type: "error", message: "Enter your full name." });
@@ -112,15 +114,17 @@ export default function SignupScreen() {
       return;
     }
 
-    if (password.length < 8) {
+    const passwordError = validateNewPassword(password);
+
+    if (passwordError) {
       setFeedback({
         type: "error",
-        message: "Create a password with at least 8 characters.",
+        message: passwordError,
       });
       return;
     }
 
-    if (confirmPassword !== password) {
+    if (!passwordsMatch(password, confirmPassword)) {
       setFeedback({ type: "error", message: "The passwords do not match." });
       return;
     }

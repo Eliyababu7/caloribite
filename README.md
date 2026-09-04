@@ -11,6 +11,7 @@ under active development toward a commercial product.
 ## Current features
 
 - Email/password account creation and sign-in with email-code verification
+- Password recovery on web, Android, and iOS using single-use Supabase links
 - Protected navigation for signed-in and signed-out experiences
 - Optional health-profile onboarding with input validation and safety guidance
 - Estimated basal metabolic rate, maintenance calories, and goal-adjusted
@@ -48,8 +49,16 @@ authenticated update function.
 ## Authentication and owner-isolated data
 
 Supabase manages account sessions, password authentication, signup verification,
-and sign-out. App routes are protected according to session and onboarding
-state.
+password recovery, and sign-out. App routes are protected according to session,
+recovery, and onboarding state. During recovery, the temporary recovery session
+is isolated from signed-in data providers until the password is updated and the
+local session is ended.
+
+Password recovery uses Supabase's PKCE flow. The callback is processed only by
+the `/update-password` route; authorization codes are exchanged by the Supabase
+client and are never stored. A short-lived, non-secret recovery marker supports
+web refresh and native app resume without treating an ordinary signed-in
+session as password-recovery authority.
 
 Food logs and health profiles currently remain in AsyncStorage on the device.
 Their storage keys are namespaced by the authenticated Supabase user ID, and
@@ -99,6 +108,37 @@ Setup:
    ```
 
 Use the Expo terminal shortcuts to select Android, iOS, or web.
+
+### Password-recovery URL configuration
+
+The app scheme is `caloribite`. In Supabase Authentication > URL Configuration,
+allow these exact redirect URLs:
+
+```text
+http://localhost:8081/update-password
+http://127.0.0.1:8081/update-password
+caloribite://update-password
+https://caloribite.com/update-password
+```
+
+Replace or extend the production web entry when the deployed domain changes.
+The production site must serve Expo Router's `/update-password` route and return
+the app shell on a direct request. Android and iOS builds must retain the
+`caloribite` scheme from `app.json`; scheme changes require a new native build.
+Test native recovery with a development or release build, not Expo Go, so the
+custom scheme and callback ownership match production behavior.
+
+Use the Supabase **Reset password** email template and preserve the generated
+recovery link (normally `{{ .ConfirmationURL }}`). If a custom template builds
+its own URL, it must carry the template's `{{ .RedirectTo }}` and `{{ .TokenHash }}`
+values correctly. Configure custom SMTP/Resend in the hosted Supabase project;
+never place SMTP credentials in this repository or in Expo public variables.
+The local Supabase mail server captures development messages instead of sending
+them externally.
+
+Before manual testing, apply the redirect allow-list and set the hosted
+Supabase password minimum to 8 in Authentication settings. These hosted changes
+are manual deployment steps and are not verified or changed by this repository.
 
 ## Environment variables
 

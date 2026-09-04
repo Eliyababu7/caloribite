@@ -1,4 +1,8 @@
-import { useFocusEffect, useRouter } from "expo-router";
+import {
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -16,6 +20,7 @@ import { PasswordInput } from "../components/PasswordInput";
 import { useAuth } from "../context/AuthContext";
 import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
+import { normalizeEmail } from "../utils/authValidation";
 
 function getLoginErrorMessage(code: string | undefined): string {
   switch (code) {
@@ -33,6 +38,7 @@ function getLoginErrorMessage(code: string | undefined): string {
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { passwordReset } = useLocalSearchParams<{ passwordReset?: string }>();
   const insets = useSafeAreaInsets();
   const { signIn } = useAuth();
 
@@ -75,7 +81,7 @@ export default function LoginScreen() {
 
     setFormError(null);
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(email);
 
     if (!normalizedEmail && !password) {
       setFormError("Enter your email address and password.");
@@ -182,6 +188,37 @@ export default function LoginScreen() {
             accessibilityLabel="Password"
             accessibilityState={{ disabled: isSubmitting }}
           />
+
+          <Pressable
+            style={styles.forgotPasswordButton}
+            onPress={() => router.push("/forgot-password")}
+            disabled={isSubmitting}
+            accessibilityRole="link"
+            accessibilityLabel="Forgot password"
+            accessibilityState={{ disabled: isSubmitting }}
+            hitSlop={8}
+          >
+            <Text
+              style={[
+                styles.forgotPasswordText,
+                isSubmitting && styles.secondaryActionDisabled,
+              ]}
+            >
+              Forgot password?
+            </Text>
+          </Pressable>
+
+          {passwordReset === "success" ? (
+            <View
+              style={styles.successContainer}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+            >
+              <Text style={styles.successText}>
+                Your password has been updated. Log in with your new password.
+              </Text>
+            </View>
+          ) : null}
 
           {formError ? (
             <View
@@ -326,6 +363,37 @@ function createStyles(theme: AppTheme) {
       paddingHorizontal: 14,
       paddingVertical: 12,
       marginBottom: 14,
+    },
+
+    successContainer: {
+      backgroundColor: colors.accentMuted,
+      borderWidth: 1,
+      borderColor: colors.accent,
+      borderRadius: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      marginBottom: 14,
+    },
+
+    successText: {
+      color: colors.text,
+      fontSize: 14,
+      lineHeight: 20,
+      fontWeight: "600",
+    },
+
+    forgotPasswordButton: {
+      minHeight: 44,
+      alignSelf: "flex-end",
+      justifyContent: "center",
+      marginTop: -8,
+      marginBottom: 4,
+    },
+
+    forgotPasswordText: {
+      color: colors.accent,
+      fontSize: 15,
+      fontWeight: "700",
     },
 
     errorText: {

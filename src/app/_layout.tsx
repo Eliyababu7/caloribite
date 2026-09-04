@@ -48,7 +48,7 @@ function LoadingScreen({ accessibilityLabel }: { accessibilityLabel: string }) {
 }
 
 function AppNavigator() {
-  const { session, isLoading } = useAuth();
+  const { session, isLoading, recoveryState } = useAuth();
   const {
     foodStorageHydrationState,
     foodStorageError,
@@ -143,14 +143,28 @@ function AppNavigator() {
           },
         }}
       >
-        <Stack.Protected guard={!session}>
+        <Stack.Protected
+          guard={recoveryState !== "idle" && recoveryState !== "completed"}
+        >
+          <Stack.Screen name="update-password" />
+        </Stack.Protected>
+
+        <Stack.Protected
+          guard={
+            !session &&
+            (recoveryState === "idle" || recoveryState === "completed")
+          }
+        >
           <Stack.Screen name="index" />
           <Stack.Screen name="login" />
           <Stack.Screen name="signup" />
           <Stack.Screen name="verify-email" />
+          <Stack.Screen name="forgot-password" />
         </Stack.Protected>
 
-        <Stack.Protected guard={Boolean(session)}>
+        <Stack.Protected
+          guard={Boolean(session) && recoveryState === "idle"}
+        >
           <Stack.Protected guard={onboardingStatus !== "required"}>
             <Stack.Screen name="dashboard" />
             <Stack.Screen name="search-food" />
