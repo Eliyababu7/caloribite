@@ -6,7 +6,10 @@ node_modules/
 # Expo
 .expo/
 dist/
+build/
+out/
 web-build/
+export/
 expo-env.d.ts
 
 # Native
@@ -17,6 +20,16 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+*.keystore
+*.der
+*.cer
+*.crt
+*.pfx
+*.ppk
+*.kdbx
+signing.properties
+credentials.json
+credentials.*.json
 
 # Metro
 .metro-health-check*
@@ -25,18 +38,38 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+pnpm-debug.log*
+*.log
+logs/
 
-# macOS
+# tests and tooling
+coverage/
+.nyc_output/
+.cache/
+.eslintcache
+.parcel-cache/
+.turbo/
+
+# operating systems
 .DS_Store
+Thumbs.db
+Desktop.ini
 *.pem
 
 # local env files
+.env
+.env.*
+!.env.example
 .env*.local
 
 # typescript
 *.tsbuildinfo
 
-example
+# editors
+.idea/
+*.swp
+*.swo
+*~
 
 # generated native folders
 /ios
