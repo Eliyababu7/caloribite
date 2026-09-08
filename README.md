@@ -26,6 +26,16 @@ under active development toward a commercial product.
 - Removal of individual entries or all entries for a selected day
 - Light and dark themes with responsive, safe-area-aware layouts
 
+## Screenshots
+
+![CaloriBite dashboard showing daily calorie and macronutrient progress in light mode](docs/screenshots/dashboard-overview-light.jpeg)
+
+*Dashboard overview — daily calories and macronutrient progress*
+
+![CaloriBite food diary showing foods grouped by meal with nutritional details in light mode](docs/screenshots/food-diary-light.jpeg)
+
+*Food diary — meal-based food logging and nutritional details*
+
 ## Technology stack
 
 - React Native 0.86 and React 19
