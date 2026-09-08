@@ -104,6 +104,10 @@ export default function UpdatePasswordScreen() {
         setFeedback(
           "Your password was updated, but secure sign-out did not finish. Try again to complete recovery.",
         );
+      } else if (result.status === "same-password") {
+        setFeedback(
+          "Choose a new password that is different from your current password.",
+        );
       } else if (result.status === "weak-password") {
         setFeedback("Choose a stronger password and try again.");
       } else {

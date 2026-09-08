@@ -48,7 +48,7 @@ export type PasswordResetRequestResult =
 
 export type RecoveryPasswordResult =
   | { status: "completed" }
-  | { status: "weak-password" | "failed" | "sign-out-failed" };
+  | { status: "same-password" | "weak-password" | "failed" | "sign-out-failed" };
 
 type AuthContextType = {
   session: Session | null;
@@ -520,6 +520,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (error) {
           publishRecoveryState("ready");
+          if (error.code === "same_password") {
+            return { status: "same-password" };
+          }
           return {
             status: error.code === "weak_password" ? "weak-password" : "failed",
           };
