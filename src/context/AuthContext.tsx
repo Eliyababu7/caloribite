@@ -305,6 +305,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (callback.kind === "none") return false;
 
+      if (callback.kind === "direct") {
+        publishRecoveryState("processing");
+        removeRecoveryParametersFromVisibleUrl();
+        try {
+          await restoreOrdinaryOrRecoverySession(true);
+          setIsLoading(false);
+        } catch {
+          await invalidateRecovery();
+        }
+        return true;
+      }
+
       if (callback.kind !== "code") {
         publishRecoveryState("processing");
         removeRecoveryParametersFromVisibleUrl();
@@ -335,7 +347,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return true;
     };
 
-    const restoreOrdinaryOrRecoverySession = async () => {
+    const restoreOrdinaryOrRecoverySession = async (requireRecovery = false) => {
       const {
         data: { session },
         error,
@@ -346,6 +358,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const marker = await loadRecoveryMarker();
 
       if (!marker || !session) {
+        if (requireRecovery) {
+          await invalidateRecovery();
+          return;
+        }
         if (marker) await clearRecoveryMarker();
         publishSession(session);
         publishRecoveryState("idle");
@@ -364,15 +380,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (requireRecovery) {
+        await invalidateRecovery();
+        return;
+      }
+
       await clearRecoveryMarker();
       publishSession(session);
       publishRecoveryState("idle");
     };
 
     const initialize = async () => {
+      let isRecoveryRequest = false;
       try {
         const initialUrl = await Linking.getInitialURL();
         const initialCallback = parsePasswordRecoveryCallback(initialUrl);
+        isRecoveryRequest = initialCallback.kind !== "none";
 
         if (initialCallback.kind !== "none") {
           publishRecoveryState("processing");
@@ -389,6 +412,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsLoading(false);
         }
       } catch {
+        if (isRecoveryRequest) {
+          await invalidateRecovery();
+          return;
+        }
         await clearRecoveryMarker();
         publishSession(null);
         publishRecoveryState("idle");

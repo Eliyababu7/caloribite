@@ -43,9 +43,10 @@ export function parsePasswordRecoveryCallback(
     }
 
     const codes = url.searchParams.getAll("code");
+    if (codes.length === 0) return { kind: "direct" };
     const code = codes.length === 1 ? codes[0]?.trim() : null;
 
-    if (!code) return { kind: "direct" };
+    if (!code) return { kind: "error" };
     if (code.length > MAXIMUM_CODE_LENGTH) return { kind: "error" };
 
     return { kind: "code", code };
