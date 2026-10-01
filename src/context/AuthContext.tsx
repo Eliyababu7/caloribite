@@ -283,6 +283,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (
+        event === "SIGNED_IN" &&
+        nextSession &&
+        recoveryStateRef.current === "completed"
+      ) {
+        publishSession(nextSession);
+        publishRecoveryState("idle");
+        return;
+      }
+
       if (recoveryStateRef.current === "idle") {
         publishSession(nextSession);
       }
