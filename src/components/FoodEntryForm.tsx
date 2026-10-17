@@ -11,7 +11,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { initialFoodServing, recalculateFoodInputs } from "../services/foodSearch/confirmationNutrition";
+import { canCompleteBarcodeNutrition, initialFoodServing, recalculateFoodInputs } from "../services/foodSearch/confirmationNutrition";
+import { BarcodeNutritionEditor } from "./BarcodeNutritionEditor";
 import type { FoodSearchResult } from "../types/foodSearch";
 import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
@@ -34,6 +35,7 @@ type FoodEntryFormProps = {
   loggedDate: string;
   initialValues?: FoodEntryInitialValues;
   foodResult?: FoodSearchResult;
+  onSaveFood?: (food: FoodSearchResult) => Promise<boolean>;
   submitLabel?: string;
   cancelLabel?: string;
   onSubmit: (foodLog: NewFoodLog) => Promise<boolean>;
@@ -84,6 +86,7 @@ export function FoodEntryForm({
   loggedDate,
   initialValues = {},
   foodResult,
+  onSaveFood,
   submitLabel = "Save to diary",
   cancelLabel = "Back",
   onSubmit,
@@ -94,8 +97,12 @@ export function FoodEntryForm({
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const providerLabel = foodResult?.source === "open-food-facts" ? "Open Food Facts" : "USDA";
+  const [nutritionFood, setNutritionFood] = useState(foodResult);
+  const [isSavingFood, setIsSavingFood] = useState(false);
+  const canComplete = foodResult ? canCompleteBarcodeNutrition(foodResult) : false;
+  const providerLabel = nutritionFood?.source === "custom" ? "your package" : foodResult?.source === "open-food-facts" ? "Open Food Facts" : "USDA";
   const initialServing = foodResult ? initialFoodServing(foodResult) : { servingId: "", grams: "", quantity: "1" };
+  if (canComplete && !initialServing.grams) initialServing.grams = "100";
   const providerInputs = foodResult ? recalculateFoodInputs(foodResult, initialServing.grams, initialServing.quantity) : null;
   const [servingId, setServingId] = useState(initialServing.servingId);
   const [servingGrams, setServingGrams] = useState(initialServing.grams);
@@ -121,8 +128,8 @@ export function FoodEntryForm({
   const submissionPending = useRef(false);
 
   const recalculate = (grams: string, nextQuantity: string) => {
-    if (!foodResult) return;
-    const totals = recalculateFoodInputs(foodResult, grams, nextQuantity);
+    if (!nutritionFood) return;
+    const totals = recalculateFoodInputs(nutritionFood, grams, nextQuantity);
     setCalories(totals.calories);
     setProtein(totals.protein);
     setCarbs(totals.carbs);
@@ -131,7 +138,7 @@ export function FoodEntryForm({
   };
 
   const handleSubmit = async () => {
-    if (disabled || submissionPending.current) {
+    if (disabled || isSavingFood || submissionPending.current) {
       return;
     }
 
@@ -210,7 +217,16 @@ export function FoodEntryForm({
     }
   };
 
-  const actionsDisabled = disabled || isSubmitting;
+  const actionsDisabled = disabled || isSubmitting || isSavingFood;
+
+  const applyPackageNutrition = (completed: FoodSearchResult) => {
+    setNutritionFood(completed);
+    const grams = servingGrams.trim() ? servingGrams : "100";
+    setServingGrams(grams);
+    const totals = recalculateFoodInputs(completed, grams, quantity);
+    setCalories(totals.calories); setProtein(totals.protein); setCarbs(totals.carbs); setFat(totals.fat);
+    setSubmitError(null);
+  };
 
   return (
     <ScrollView
@@ -280,6 +296,14 @@ export function FoodEntryForm({
           selectionColor={theme.colors.accent}
           editable={!actionsDisabled}
         />
+
+        {foodResult && canComplete && <BarcodeNutritionEditor food={foodResult} name={foodName}
+          disabled={actionsDisabled} onApply={applyPackageNutrition}
+          onSave={onSaveFood ? async (completed) => {
+            setIsSavingFood(true);
+            try { return await onSaveFood(completed); }
+            finally { setIsSavingFood(false); }
+          } : undefined} />}
 
         {foodResult && <>
           <Text style={styles.label}>Serving</Text>

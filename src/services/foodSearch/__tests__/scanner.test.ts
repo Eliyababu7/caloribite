@@ -123,6 +123,7 @@ function cameraHarness(platform: string, permission: { granted: boolean; canAskA
   let settingsCalls = 0;
   let lookupCalls = 0;
   const getPermission = async () => permission;
+  const client = { barcode: async () => { lookupCalls++; return food; } };
   const hook = (initial: any) => {
     const index = cursor++;
     if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;
@@ -132,7 +133,11 @@ function cameraHarness(platform: string, permission: { granted: boolean; canAskA
     react: {
       useState: hook,
       useRef: (value: any) => hook(() => ({ current: value }))[0],
-      useMemo: (factory: () => any) => factory(),
+      useMemo: (factory: () => any, deps: any[]) => {
+        const index = cursor++;
+        if (!slots[index] || deps.some((dep, i) => dep !== slots[index].deps[i])) slots[index] = { deps, value: factory() };
+        return slots[index].value;
+      },
       useEffect: (effect: () => void, deps?: any[]) => {
         const index = cursor++;
         if (!deps || !slots[index] || deps.some((dep, i) => dep !== slots[index][i])) effects.push(effect);
@@ -153,7 +158,7 @@ function cameraHarness(platform: string, permission: { granted: boolean; canAskA
     },
     "../theme/theme": { useAppTheme: () => ({ colors: {} }) },
     "../services/foodSearch/cameraAccess": { cameraPermissionState, webCameraProblem },
-    "../services/foodSearch/foodSearchClient": { foodSearchClient: { barcode: async () => { lookupCalls++; return food; } } },
+    "../services/foodSearch/useAccountFoodSearch": { useAccountFoodSearch: () => client },
     "../services/foodSearch/foodSearchService": { FOOD_SEARCH_MESSAGES: {} },
     "../services/foodSearch/scannerController": { createScannerController, FOOD_BARCODE_TYPES, INITIAL_SCANNER_STATE: { status: "ready", barcode: "", foodResult: null } },
   };

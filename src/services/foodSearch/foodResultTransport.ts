@@ -23,34 +23,39 @@ function boundedText(value: unknown, max: number, optional = false): boolean {
 
 // Whitelist a small normalized record. Never carry raw provider fields into navigation.
 export function validateTransportFood(value: unknown): FoodSearchResult | null {
-  if (!record(value) || (value.source !== "usda" && value.source !== "open-food-facts") ||
+  if (!record(value) || (value.source !== "usda" && value.source !== "open-food-facts" && value.source !== "custom") ||
     !boundedText(value.externalId, 16) ||
     !boundedText(value.name, 300) || !boundedText(value.brand, 200, true) ||
     !boundedText(value.attributionLabel, 200) ||
     !record(value.nutritionPer100g) || !Array.isArray(value.servingOptions) ||
     value.servingOptions.length > 20) return null;
   const isOpenFoodFacts = value.source === "open-food-facts";
-  if (isOpenFoodFacts) {
+  const isSavedBarcode = value.source === "custom";
+  if (isSavedBarcode && !boundedText(value.savedForUserId, 128, true)) return null;
+  if (isOpenFoodFacts || isSavedBarcode) {
     if (!isValidProductBarcode(value.externalId) || value.barcode !== value.externalId) return null;
   } else if (!/^\d+$/.test(String(value.externalId)) ||
     !Number.isSafeInteger(Number(value.externalId)) || Number(value.externalId) <= 0) return null;
   const nutrition = value.nutritionPer100g;
   if (nutrients.some((key) => nutrition[key] !== null &&
     (typeof nutrition[key] !== "number" || !Number.isFinite(nutrition[key]) || nutrition[key] < 0))) return null;
+  if (isSavedBarcode && nutrients.some((key) => nutrition[key] === null)) return null;
   if (value.servingOptions.some((serving) => !record(serving) ||
     !boundedText(serving.id, 100) || !boundedText(serving.label, 200) ||
     typeof serving.grams !== "number" || !Number.isFinite(serving.grams) || serving.grams <= 0)) return null;
   if (!boundedText(value.defaultServingId, 100, true)) return null;
-  const externalId = isOpenFoodFacts ? value.externalId as string : String(Number(value.externalId));
-  const sourceUrl = isOpenFoodFacts
+  const externalId = isOpenFoodFacts || isSavedBarcode ? value.externalId as string : String(Number(value.externalId));
+  const sourceUrl = isOpenFoodFacts || isSavedBarcode
     ? `https://world.openfoodfacts.org/product/${externalId}`
     : `https://fdc.nal.usda.gov/food-details/${externalId}/nutrients`;
   const normalized = normalizeFoodResult({
     source: value.source, externalId, name: value.name,
-    ...(isOpenFoodFacts ? { barcode: externalId } : {}),
+    ...(isOpenFoodFacts || isSavedBarcode ? { barcode: externalId } : {}),
+    ...(isSavedBarcode && value.savedForUserId ? { savedForUserId: value.savedForUserId } : {}),
     brand: value.brand, nutritionPer100g: nutrition, servingOptions: value.servingOptions,
     defaultServingId: value.defaultServingId,
-    attributionLabel: isOpenFoodFacts ? "Open Food Facts (ODbL)" : "FoodData Central, U.S. Department of Agriculture", sourceUrl,
+    attributionLabel: isSavedBarcode ? "Your saved nutrition · Product from Open Food Facts (ODbL)"
+      : isOpenFoodFacts ? "Open Food Facts (ODbL)" : "FoodData Central, U.S. Department of Agriculture", sourceUrl,
   });
   return normalized;
 }

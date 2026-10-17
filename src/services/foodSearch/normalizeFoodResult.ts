@@ -113,6 +113,7 @@ export function normalizeFoodResult(input: unknown): FoodSearchResult | null {
   const barcode = normalizeText(input.barcode);
   const sourceUrl = normalizeText(input.sourceUrl);
   const attributionLabel = normalizeText(input.attributionLabel) ?? "";
+  const savedForUserId = input.source === "custom" ? normalizeText(input.savedForUserId) : undefined;
 
   return {
     source: input.source,
@@ -120,6 +121,7 @@ export function normalizeFoodResult(input: unknown): FoodSearchResult | null {
     name,
     ...(brand ? { brand } : {}),
     ...(barcode ? { barcode } : {}),
+    ...(savedForUserId ? { savedForUserId } : {}),
     nutritionPer100g: normalizeNutrition(input.nutritionPer100g),
     servingOptions,
     ...(defaultServingId ? { defaultServingId } : {}),

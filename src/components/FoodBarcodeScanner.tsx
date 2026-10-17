@@ -2,7 +2,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, ActivityIndicator, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { cameraPermissionState, webCameraProblem } from "../services/foodSearch/cameraAccess";
-import { foodSearchClient } from "../services/foodSearch/foodSearchClient";
+import { useAccountFoodSearch } from "../services/foodSearch/useAccountFoodSearch";
 import { FOOD_SEARCH_MESSAGES } from "../services/foodSearch/foodSearchService";
 import { createScannerController, FOOD_BARCODE_TYPES, INITIAL_SCANNER_STATE } from "../services/foodSearch/scannerController";
 import { useAppTheme } from "../theme/theme";
@@ -10,6 +10,7 @@ import { useAppTheme } from "../theme/theme";
 export type ScannerExit = "cancel" | "manual-barcode" | "manual-food" | { foodResult: string };
 
 export function FoodBarcodeScanner({ onExit }: { onExit: (destination: ScannerExit) => void }) {
+  const foodSearchClient = useAccountFoodSearch();
   const { colors } = useAppTheme();
   const styles = useMemo(() => StyleSheet.create({
     content: { gap: 14 },
@@ -29,7 +30,7 @@ export function FoodBarcodeScanner({ onExit }: { onExit: (destination: ScannerEx
   const mounted = useRef(true);
   const heading = useRef<View>(null);
   const [state, setState] = useState(INITIAL_SCANNER_STATE);
-  const [controller] = useState(() => createScannerController(foodSearchClient, setState));
+  const controller = useMemo(() => createScannerController(foodSearchClient, setState), [foodSearchClient]);
   const [exit, setExit] = useState<ScannerExit | null>(null);
   const exiting = useRef(false);
   const onExitRef = useRef(onExit);

@@ -1,12 +1,14 @@
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 
 import { deserializeFoodResult } from "../services/foodSearch/foodResultTransport";
+import { useAccountFoodSearch } from "../services/foodSearch/useAccountFoodSearch";
 
 import {
   FoodEntryForm,
   type FoodEntryInitialValues,
 } from "../components/FoodEntryForm";
 import { useFoodLogs } from "../context/FoodLogContext";
+import { useAuth } from "../context/AuthContext";
 import type { NewFoodLog } from "../types/food";
 import { resolveDiaryDateParam } from "../utils/diaryRoute";
 import { getDefaultMealType, isMealType } from "../utils/meal";
@@ -23,11 +25,14 @@ export default function ConfirmFoodScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { addFoodLog, isFoodLogMutationPending } = useFoodLogs();
+  const accountFoods = useAccountFoodSearch();
+  const { authIdentity } = useAuth();
 
   const loggedDate = resolveDiaryDateParam(params.loggedDate);
 
   const foodResult = deserializeFoodResult(params.foodResult);
-  const invalidFoodResult = params.foodResult !== undefined && foodResult === null;
+  const invalidFoodResult = params.foodResult !== undefined && (foodResult === null ||
+    (foodResult.source === "custom" && (!authIdentity || foodResult.savedForUserId !== authIdentity.userId)));
 
   const requestedMealType = getParamValue(params.mealType);
 
@@ -61,8 +66,9 @@ export default function ConfirmFoodScreen() {
 
   return (
     <FoodEntryForm
-      key={foodResult ? JSON.stringify(foodResult) : "starter"}
+      key={`${authIdentity?.userId}:${authIdentity?.generation}:${foodResult ? JSON.stringify(foodResult) : "starter"}`}
       foodResult={foodResult ?? undefined}
+      onSaveFood={accountFoods.saveFood}
       title="Confirm food"
       subtitle="Review and edit the nutrition details before saving this food to your diary."
       loggedDate={loggedDate}
