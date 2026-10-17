@@ -1,11 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { randomUUID } from "expo-crypto";
 import { useEffect, useMemo, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { foodSearchClient } from "./foodSearchClient";
 import { createSavedFoodStore } from "./savedFoods";
 import { createUserFoodSearchService } from "./userFoodSearchService";
 
-const savedFoods = createSavedFoodStore(AsyncStorage);
+const savedFoods = createSavedFoodStore(AsyncStorage, randomUUID);
 
 export function useAccountFoodSearch() {
   const { authIdentity } = useAuth();

@@ -28,6 +28,7 @@ export type FoodSearchResult = {
   barcode?: string;
   // Account scope for locally saved results carried through confirmation routes.
   savedForUserId?: string;
+  localId?: string;
   nutritionPer100g: NutritionPer100g;
   servingOptions: FoodServingOption[];
   defaultServingId?: string;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { completeBarcodeNutrition, hasIncompleteNutrition, INCOMPLETE_NUTRITION_WARNING, nutritionInputs } from "../services/foodSearch/confirmationNutrition";
+import { completeBarcodeNutrition, hasIncompleteNutrition, INCOMPLETE_NUTRITION_WARNING, NUTRITION_INPUT_FIELDS, nutritionInputs } from "../services/foodSearch/confirmationNutrition";
 import { useAppTheme } from "../theme/theme";
 import type { FoodSearchResult } from "../types/foodSearch";
 
@@ -11,10 +11,6 @@ type Props = {
   onApply: (food: FoodSearchResult) => void;
   onSave?: (food: FoodSearchResult) => Promise<boolean>;
 };
-const fields = [
-  ["calories", "Calories per 100 g"], ["protein", "Protein per 100 g (g)"],
-  ["carbs", "Carbohydrates per 100 g (g)"], ["fat", "Fat per 100 g (g)"],
-] as const;
 
 export function BarcodeNutritionEditor({ food, name, disabled, onApply, onSave }: Props) {
   const { colors } = useAppTheme();
@@ -63,7 +59,7 @@ export function BarcodeNutritionEditor({ food, name, disabled, onApply, onSave }
     <Text style={styles.label}>Package nutrition per 100 g</Text>
     <Text style={styles.text}>Barcode: {food.barcode}{food.brand ? ` | ${food.brand}` : ""}</Text>
     <Text style={styles.text}>Enter values from the package per 100 g, then apply them to calculate your serving. Saving here remembers the food only for your account on this device; it does not add a diary entry.</Text>
-    {fields.map(([key, label]) => <View key={key}>
+    {NUTRITION_INPUT_FIELDS.map(([key, label]) => <View key={key}>
       <Text style={styles.label}>{label}</Text>
       <TextInput style={styles.input} value={inputs[key]} accessibilityLabel={label} keyboardType="decimal-pad"
         maxLength={20} editable={!disabled} placeholder="Unavailable - enter value"

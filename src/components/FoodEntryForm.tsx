@@ -100,7 +100,7 @@ export function FoodEntryForm({
   const [nutritionFood, setNutritionFood] = useState(foodResult);
   const [isSavingFood, setIsSavingFood] = useState(false);
   const canComplete = foodResult ? canCompleteBarcodeNutrition(foodResult) : false;
-  const providerLabel = nutritionFood?.source === "custom" ? "your package" : foodResult?.source === "open-food-facts" ? "Open Food Facts" : "USDA";
+  const providerLabel = nutritionFood?.source === "custom" ? (foodResult?.barcode ? "your package" : "your saved food") : foodResult?.source === "open-food-facts" ? "Open Food Facts" : "USDA";
   const initialServing = foodResult ? initialFoodServing(foodResult) : { servingId: "", grams: "", quantity: "1" };
   if (canComplete && !initialServing.grams) initialServing.grams = "100";
   const providerInputs = foodResult ? recalculateFoodInputs(foodResult, initialServing.grams, initialServing.quantity) : null;
