@@ -1,20 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { createBarcodeController, type BarcodeState } from "../services/foodSearch/barcodeController";
-import { foodSearchClient } from "../services/foodSearch/foodSearchClient";
+import { useAccountFoodSearch } from "../services/foodSearch/useAccountFoodSearch";
+import { hasIncompleteNutrition, INCOMPLETE_NUTRITION_WARNING } from "../services/foodSearch/confirmationNutrition";
 import { FOOD_SEARCH_MESSAGES } from "../services/foodSearch/foodSearchService";
 import type { FoodSearchResult } from "../types/foodSearch";
 import { useAppTheme, type AppTheme } from "../theme/theme";
 
 export function BarcodeLookupPanel({ onContinue }: { onContinue: (food: FoodSearchResult) => boolean }) {
+  const foodSearchClient = useAccountFoodSearch();
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [barcode, setBarcode] = useState("");
   const [state, setState] = useState<BarcodeState>({ status: "idle", product: null });
-  const [controller] = useState(() => createBarcodeController(foodSearchClient, setState));
+  const controller = useMemo(() => createBarcodeController(foodSearchClient, setState), [foodSearchClient]);
   const [continueError, setContinueError] = useState(false);
   const continuing = useRef(false);
-  useEffect(() => () => controller.invalidate(), [controller]);
+  useEffect(() => {
+    setState({ status: "idle", product: null });
+    setBarcode(""); continuing.current = false; setContinueError(false);
+    return () => controller.invalidate();
+  }, [controller]);
   const loading = state.status === "loading";
   const error = state.status in FOOD_SEARCH_MESSAGES ? state.status as keyof typeof FOOD_SEARCH_MESSAGES : null;
   const nutrient = (value: number | null, unit: string) => value === null ? "Unavailable" : `${value}${unit}`;
@@ -62,13 +68,14 @@ export function BarcodeLookupPanel({ onContinue }: { onContinue: (food: FoodSear
       </>}
     </View>
     {state.product && <View style={styles.product}>
-      <Text style={styles.source}>Open Food Facts</Text>
+      <Text style={styles.source}>{state.product.source === "custom" ? "Your saved food" : "Open Food Facts"}</Text>
       <Text style={styles.title}>{state.product.name}</Text>
       {state.product.brand && <Text style={styles.text}>{state.product.brand}</Text>}
       <Text style={styles.text}>Barcode: {state.product.barcode}</Text>
       <Text style={styles.text}>Per 100 g: {nutrient(state.product.nutritionPer100g.calories, " kcal")}</Text>
       <Text style={styles.text}>Protein: {nutrient(state.product.nutritionPer100g.protein, " g")} | Carbohydrates: {nutrient(state.product.nutritionPer100g.carbs, " g")} | Fat: {nutrient(state.product.nutritionPer100g.fat, " g")}</Text>
       <Text style={styles.text}>Data: {state.product.attributionLabel}</Text>
+      {hasIncompleteNutrition(state.product) && <Text style={styles.text} accessibilityRole="alert">{INCOMPLETE_NUTRITION_WARNING}</Text>}
       {continueError && <Text style={styles.text} accessibilityRole="alert">This product could not be opened. Try another barcode or add food manually.</Text>}
       <Pressable style={styles.button} accessibilityRole="button" accessibilityLabel={`Confirm ${state.product.name}`}
         onPress={() => {
