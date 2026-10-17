@@ -94,6 +94,7 @@ export function FoodEntryForm({
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
+  const providerLabel = foodResult?.source === "open-food-facts" ? "Open Food Facts" : "USDA";
   const initialServing = foodResult ? initialFoodServing(foodResult) : { servingId: "", grams: "", quantity: "1" };
   const providerInputs = foodResult ? recalculateFoodInputs(foodResult, initialServing.grams, initialServing.quantity) : null;
   const [servingId, setServingId] = useState(initialServing.servingId);
@@ -141,7 +142,7 @@ export function FoodEntryForm({
         return;
       }
       if ([calories, protein, carbs, fat].some((value) => !value.trim() || !Number.isFinite(Number(value)) || Number(value) < 0)) {
-        setSubmitError("Enter a non-negative number for every nutrient. USDA values marked unavailable must be entered before saving.");
+        setSubmitError(`Enter a non-negative number for every nutrient. ${providerLabel} values marked unavailable must be entered before saving.`);
         return;
       }
       if (!foodName.trim()) {
@@ -313,7 +314,7 @@ export function FoodEntryForm({
             accessibilityLabel="Serving quantity" maxLength={20}
             selectionColor={theme.colors.accent} editable={!actionsDisabled}
             onChangeText={(value) => { if (value !== quantity) { setQuantity(value); recalculate(servingGrams, value); } }} />
-          <Text style={styles.subtitle}>Totals below are editable. Changing serving weight, serving option, or quantity recalculates from USDA nutrition and replaces your nutrient edits. Unavailable values must be entered before saving.</Text>
+          <Text style={styles.subtitle}>Totals below are editable. Changing serving weight, serving option, or quantity recalculates from {providerLabel} nutrition and replaces your nutrient edits. Unavailable values must be entered before saving.</Text>
         </>}
 
         <Text style={styles.label}>Calories</Text>

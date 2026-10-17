@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { BarcodeLookupPanel } from "../components/BarcodeLookupPanel";
 import { foodSearchClient } from "../services/foodSearch/foodSearchClient";
 import { FOOD_SEARCH_MESSAGES, FoodSearchError, type FoodSearchErrorKind } from "../services/foodSearch/foodSearchService";
 import { serializeFoodResult } from "../services/foodSearch/foodResultTransport";
@@ -30,6 +31,7 @@ export default function SearchFoodScreen() {
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
+  const [showBarcode, setShowBarcode] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [searchState, setSearchState] = useState<SearchState>({ status: "idle", results: [] });
   const [controller] = useState(() => createSearchController(foodSearchClient, setSearchState));
@@ -58,6 +60,7 @@ export default function SearchFoodScreen() {
     void controller.submit(query);
   };
   const leaveSearch = () => {
+    setShowBarcode(false);
     controller.invalidate();
     setSearchState((state) => state.status === "loading" ? { status: "idle", results: [] } : state);
     invalidateSelection();
@@ -116,6 +119,14 @@ export default function SearchFoodScreen() {
         loggedDate,
       },
     });
+  };
+
+  const handleBarcodeContinue = (food: FoodSearchResult): boolean => {
+    const foodResult = serializeFoodResult(food);
+    if (!foodResult) return false;
+    leaveSearch();
+    router.push({ pathname: "/confirm-food", params: { foodResult, loggedDate } });
+    return true;
   };
 
   const handleManualEntry = () => {
@@ -185,6 +196,13 @@ export default function SearchFoodScreen() {
         >
           <Text style={styles.manualButtonText}>Add food manually</Text>
         </Pressable>
+
+        <Pressable style={styles.manualButton} accessibilityRole="button"
+          accessibilityLabel="Enter product barcode" accessibilityState={{ expanded: showBarcode }}
+          onPress={() => setShowBarcode((visible) => !visible)}>
+          <Text style={styles.manualButtonText}>{showBarcode ? "Close barcode entry" : "Enter product barcode"}</Text>
+        </Pressable>
+        {showBarcode && <BarcodeLookupPanel onContinue={handleBarcodeContinue} />}
 
         <View accessibilityLiveRegion="polite">
           {searchState.status === "idle" && <Text style={styles.emptyText}>Enter a food and press Search to find USDA results.</Text>}

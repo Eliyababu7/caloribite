@@ -12,3 +12,8 @@ export const foodSearchClient = createFoodSearchService(
     return state.isConnected !== false && state.isInternetReachable !== false;
   },
 );
+
+// End the in-memory product cache at sign-out without reading session credentials.
+supabase.auth.onAuthStateChange((event) => {
+  if (event === "SIGNED_OUT") foodSearchClient.clearBarcodeCache();
+});
