@@ -62,6 +62,7 @@ export function componentHarness(file: string, exportName: string, initialProps:
     render,
     async settle() { await new Promise((done) => setImmediate(done)); render(); },
     node: (type: string) => nodes(tree).find((node) => node.type === type),
+    nodes: () => nodes(tree),
     input: (label: string) => nodes(tree).find((node) => node.type === "TextInput" && node.props.accessibilityLabel === label),
     button: (label: string) => nodes(tree).find((node) => node.type === "Pressable" && node.props.accessibilityLabel === label),
     text: () => nodes(tree).filter((node) => node.type === "Text").map((node) => node.props.children).join(" "),

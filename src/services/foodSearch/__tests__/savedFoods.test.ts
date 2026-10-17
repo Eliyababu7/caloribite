@@ -73,7 +73,7 @@ test("saving the same barcode updates one record without losing another barcode"
   await store.save("a", { ...completed(), barcode: "00000001", externalId: "00000001" });
   await store.save("a", { ...completed(), nutritionPer100g: { calories: 210, protein: 6, carbs: 31, fat: 0 } });
   const raw = JSON.parse(storage.data.get(savedFoodsKey("a"))!);
-  assert.equal(raw.version, 1); assert.equal(raw.foods.length, 2);
+  assert.equal(raw.version, 2); assert.equal(raw.foods.length, 2);
   assert.equal((await store.find("a", CODE))?.nutritionPer100g.calories, 210);
 });
 test("simultaneous saves for one user do not overwrite each other", async () => {
@@ -91,7 +91,7 @@ for (const raw of ["{", "null", "[]", '{"version":0,"foods":[]}', '{"version":1,
   });
 }
 test("newer storage is ignored for lookup and protected from overwrite", async () => {
-  const storage = memoryStorage(); const raw = JSON.stringify({ version: 2, foods: [completed()] });
+  const storage = memoryStorage(); const raw = JSON.stringify({ version: 3, foods: [completed()] });
   storage.data.set(savedFoodsKey("a"), raw); const store = createSavedFoodStore(storage);
   assert.equal(await store.find("a", CODE), null); await assert.rejects(store.save("a", completed()));
   assert.equal(storage.data.get(savedFoodsKey("a")), raw);

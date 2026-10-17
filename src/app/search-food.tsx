@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BarcodeLookupPanel } from "../components/BarcodeLookupPanel";
+import { MyFoodsLibrary } from "../components/MyFoodsLibrary";
 import { foodSearchClient } from "../services/foodSearch/foodSearchClient";
 import { FOOD_SEARCH_MESSAGES, FoodSearchError, type FoodSearchErrorKind } from "../services/foodSearch/foodSearchService";
 import { serializeFoodResult } from "../services/foodSearch/foodResultTransport";
@@ -207,6 +208,7 @@ export default function SearchFoodScreen() {
           onPress={() => { leaveSearch(); router.push({ pathname: "/scan-barcode", params: { loggedDate } }); }}>
           <Text style={styles.manualButtonText}>Scan barcode</Text>
         </Pressable>
+        <MyFoodsLibrary query={searchText} onSelect={handleBarcodeContinue} />
         {showBarcode && <BarcodeLookupPanel onContinue={handleBarcodeContinue} />}
 
         <View accessibilityLiveRegion="polite">

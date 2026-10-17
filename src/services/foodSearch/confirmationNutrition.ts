@@ -7,21 +7,31 @@ export function hasIncompleteNutrition(food: FoodSearchResult): boolean {
   return Object.values(food.nutritionPer100g).some((value) => value === null);
 }
 export function canCompleteBarcodeNutrition(food: FoodSearchResult): boolean {
-  return food.source === "custom" || (food.source === "open-food-facts" && hasIncompleteNutrition(food));
+  return (food.source === "custom" && !!food.barcode) || (food.source === "open-food-facts" && hasIncompleteNutrition(food));
+}
+
+export function parseNutritionInputs(inputs: NutritionInputs): NutritionPer100g | null {
+  const keys = ["calories", "protein", "carbs", "fat"] as const;
+  if (keys.some((key) => typeof inputs[key] !== "string" || !inputs[key].trim() || !Number.isFinite(Number(inputs[key])) || Number(inputs[key]) < 0)) return null;
+  return { calories: Number(inputs.calories), protein: Number(inputs.protein), carbs: Number(inputs.carbs), fat: Number(inputs.fat) };
 }
 
 // The package editor always uses per-100-g values, never serving totals.
 export function completeBarcodeNutrition(food: FoodSearchResult, inputs: NutritionInputs, name = food.name): FoodSearchResult | null {
   if (!canCompleteBarcodeNutrition(food)) return null;
-  const values = Object.values(inputs);
-  if (values.length !== 4 || values.some((value) => !value.trim() || !Number.isFinite(Number(value)) || Number(value) < 0)) return null;
+  const nutritionPer100g = parseNutritionInputs(inputs);
+  if (!nutritionPer100g) return null;
   return validateTransportFood({
     ...food, source: "custom", name,
-    nutritionPer100g: { calories: Number(inputs.calories), protein: Number(inputs.protein), carbs: Number(inputs.carbs), fat: Number(inputs.fat) },
+    nutritionPer100g,
   });
 }
 
 export type NutritionInputs = Record<keyof NutritionPer100g, string>;
+export const NUTRITION_INPUT_FIELDS = [
+  ["calories", "Calories per 100 g"], ["protein", "Protein per 100 g (g)"],
+  ["carbs", "Carbohydrates per 100 g (g)"], ["fat", "Fat per 100 g (g)"],
+] as const;
 export function nutritionInputs(nutrition: NutritionPer100g | null): NutritionInputs {
   return {
     calories: nutrition?.calories == null ? "" : String(nutrition.calories),

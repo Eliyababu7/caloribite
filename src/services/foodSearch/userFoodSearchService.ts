@@ -8,6 +8,25 @@ type Owner = Readonly<{ userId: string; generation: number }>;
 export function createUserFoodSearchService(provider: FoodSearchService, store: SavedFoodStore, getOwner: () => Owner | null) {
   return {
     ...provider,
+    async listFoods() {
+      const owner = getOwner();
+      if (!owner) return [];
+      const foods = await store.list(owner.userId);
+      if (getOwner()?.userId !== owner.userId || getOwner()?.generation !== owner.generation) throw new FoodSearchError("unauthorized");
+      return foods.map((food) => ({ ...food, savedForUserId: owner.userId }));
+    },
+    subscribeFoods(listener: () => void) {
+      const owner = getOwner();
+      if (!owner) return () => {};
+      return store.subscribe((userId) => {
+        if (userId === owner.userId && getOwner()?.userId === owner.userId && getOwner()?.generation === owner.generation) listener();
+      });
+    },
+    async deleteFood(localId: string) {
+      const owner = getOwner();
+      if (!owner) return false;
+      return store.remove(owner.userId, localId, () => getOwner()?.userId === owner.userId && getOwner()?.generation === owner.generation);
+    },
     async barcode(code: string): Promise<FoodSearchResult> {
       if (!isValidProductBarcode(code)) throw new FoodSearchError("invalid-barcode");
       const owner = getOwner();
