@@ -1,7 +1,9 @@
+import { createOpenFoodFactsClient } from "./openFoodFactsClient.ts";
+import { normalizeOpenFoodFacts } from "./normalizeOpenFoodFacts.ts";
 import { readBoundedText } from "./readBoundedText.ts";
 import { foodSearchCorsHeaders, isAllowedFoodSearchOrigin } from "./cors.ts";
 import { normalizeUsdaFood } from "./normalizeUsdaFood.ts";
-import { UsdaClientError, type FunctionErrorCode } from "./types.ts";
+import { FoodProviderError, type FunctionErrorCode } from "./types.ts";
 import { createUsdaClient } from "./usdaClient.ts";
 import {
   hasAuthenticatedUserBearer,
@@ -112,27 +114,45 @@ export function createFoodSearchHandler(
       return errorResponse(400, "invalid_request", origin);
     }
 
-    const apiKey = dependencies.getApiKey();
-    if (!apiKey || apiKey.trim().length === 0) {
-      return errorResponse(503, "food_search_not_configured", origin);
-    }
-
-    const client = createUsdaClient({
-      apiKey,
-      ...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
-      ...(dependencies.timeoutMs !== undefined
-        ? { timeoutMs: dependencies.timeoutMs }
-        : {}),
-      ...(dependencies.now ? { now: dependencies.now } : {}),
-      ...(dependencies.setTimeoutFn
-        ? { setTimeoutFn: dependencies.setTimeoutFn }
-        : {}),
-      ...(dependencies.clearTimeoutFn
-        ? { clearTimeoutFn: dependencies.clearTimeoutFn }
-        : {}),
-    });
-
     try {
+      const clientOptions = {
+        ...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
+        ...(dependencies.timeoutMs !== undefined
+          ? { timeoutMs: dependencies.timeoutMs }
+          : {}),
+        ...(dependencies.now ? { now: dependencies.now } : {}),
+        ...(dependencies.setTimeoutFn
+          ? { setTimeoutFn: dependencies.setTimeoutFn }
+          : {}),
+        ...(dependencies.clearTimeoutFn
+          ? { clearTimeoutFn: dependencies.clearTimeoutFn }
+          : {}),
+      };
+      if (validation.value.provider === "open-food-facts") {
+        const client = createOpenFoodFactsClient(clientOptions);
+        if (validation.value.action === "search") {
+          const products = await client.search(validation.value.query, validation.value.pageSize);
+          const seen = new Set<string>();
+          const results = products.map(normalizeOpenFoodFacts).filter((food) => {
+            if (!food || seen.has(food.externalId!)) return false;
+            seen.add(food.externalId!);
+            return true;
+          });
+          return jsonResponse(200, { results }, origin);
+        }
+        const code = validation.value.action === "barcode" ? validation.value.barcode : validation.value.externalId;
+        const product = await client.detail(code);
+        if (product === null) return errorResponse(404, "food_not_found", origin);
+        const result = normalizeOpenFoodFacts(product);
+        if (!result) return errorResponse(502, "food_provider_error", origin);
+        return jsonResponse(200, { result }, origin);
+      }
+
+      const apiKey = dependencies.getApiKey();
+      if (!apiKey || apiKey.trim().length === 0) {
+        return errorResponse(503, "food_search_not_configured", origin);
+      }
+      const client = createUsdaClient({ apiKey, ...clientOptions });
       if (validation.value.action === "search") {
         const upstream = await client.search(
           validation.value.query,
@@ -156,11 +176,15 @@ export function createFoodSearchHandler(
       }
       return jsonResponse(200, { result }, origin);
     } catch (error) {
-      if (!(error instanceof UsdaClientError)) {
+      if (!(error instanceof FoodProviderError)) {
         return errorResponse(502, "food_provider_error", origin);
       }
 
       switch (error.kind) {
+        case "not-found":
+          return errorResponse(404, "food_not_found", origin);
+        case "unavailable":
+          return errorResponse(503, "food_provider_unavailable", origin, error.retryAfter);
         case "configuration":
           return errorResponse(503, "food_search_not_configured", origin);
         case "rate-limit":

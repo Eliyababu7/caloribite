@@ -1,10 +1,12 @@
+import { sanitizeRetryAfter } from "./retryAfter.ts";
 import { readBoundedText } from "./readBoundedText.ts";
 import { UsdaClientError } from "./types.ts";
+
+export { sanitizeRetryAfter } from "./retryAfter.ts";
 
 const DEFAULT_BASE_URL = "https://api.nal.usda.gov/fdc/v1";
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 1_000_000;
-const MAX_RETRY_AFTER_SECONDS = 3_600;
 
 export type UsdaClient = {
   search: (query: string, pageSize: number) => Promise<unknown>;
@@ -19,36 +21,6 @@ export type UsdaClientOptions = {
   setTimeoutFn?: typeof setTimeout;
   clearTimeoutFn?: typeof clearTimeout;
 };
-
-export function sanitizeRetryAfter(
-  value: string | null,
-  now = Date.now(),
-): string | undefined {
-  if (value === null) {
-    return undefined;
-  }
-
-  const trimmed = value.trim();
-  let seconds: number;
-  if (/^\d+$/.test(trimmed)) {
-    seconds = Number(trimmed);
-  } else {
-    if (!/^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(trimmed)) {
-      return undefined;
-    }
-    const retryAt = Date.parse(trimmed);
-    if (!Number.isFinite(retryAt)) {
-      return undefined;
-    }
-    seconds = Math.max(0, Math.ceil((retryAt - now) / 1000));
-  }
-
-  if (!Number.isFinite(seconds)) {
-    return undefined;
-  }
-
-  return String(Math.min(Math.max(seconds, 0), MAX_RETRY_AFTER_SECONDS));
-}
 
 function isAbortError(error: unknown): boolean {
   return (

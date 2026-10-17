@@ -10,6 +10,13 @@ const temporaryDirectory = await mkdtemp(
 );
 
 const sourceFiles = [
+  "src/services/foodSearch/__tests__/scanner.test.ts",
+  "src/services/foodSearch/__tests__/barcodeLookup.test.ts",
+  "supabase/functions/food-search/__tests__/openFoodFactsValidation.test.ts",
+  "supabase/functions/food-search/__tests__/normalizeOpenFoodFacts.test.ts",
+  "supabase/functions/food-search/__tests__/openFoodFactsClient.test.ts",
+  "supabase/functions/food-search/__tests__/openFoodFactsHandler.test.ts",
+
   "src/types/foodSearch.ts",
   "src/services/foodSearch/__tests__/foodSearchIntegration.test.ts",
   "src/services/foodSearch/normalizeFoodResult.ts",
@@ -29,6 +36,13 @@ const sourceFiles = [
 ];
 
 const testFiles = [
+  "src/services/foodSearch/__tests__/scanner.test.js",
+  "src/services/foodSearch/__tests__/barcodeLookup.test.js",
+  "supabase/functions/food-search/__tests__/openFoodFactsValidation.test.js",
+  "supabase/functions/food-search/__tests__/normalizeOpenFoodFacts.test.js",
+  "supabase/functions/food-search/__tests__/openFoodFactsClient.test.js",
+  "supabase/functions/food-search/__tests__/openFoodFactsHandler.test.js",
+
   "src/services/foodSearch/__tests__/foodSearchIntegration.test.js",
   "src/services/foodSearch/__tests__/normalizeFoodResult.test.js",
   "src/services/foodSearch/__tests__/calculateServingNutrition.test.js",
@@ -85,7 +99,7 @@ async function runDomainTests() {
     const testRun = spawnSync(
       process.execPath,
       ["--test", ...testFiles.map((file) => join(temporaryDirectory, file))],
-      { cwd: temporaryDirectory, stdio: "inherit" },
+      { cwd: projectRoot, stdio: "inherit" },
     );
 
     if (testRun.error) {

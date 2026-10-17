@@ -1,4 +1,5 @@
 import type { FoodSearchResult } from "../../types/foodSearch";
+import { isValidProductBarcode } from "./barcodeValidation";
 import { normalizeFoodResult } from "./normalizeFoodResult";
 
 export const MAX_FOOD_ROUTE_BYTES = 6000;
@@ -22,13 +23,17 @@ function boundedText(value: unknown, max: number, optional = false): boolean {
 
 // Whitelist a small normalized record. Never carry raw provider fields into navigation.
 export function validateTransportFood(value: unknown): FoodSearchResult | null {
-  if (!record(value) || value.source !== "usda" ||
-    !boundedText(value.externalId, 16) || !/^\d+$/.test(String(value.externalId)) ||
-    !Number.isSafeInteger(Number(value.externalId)) || Number(value.externalId) <= 0 ||
+  if (!record(value) || (value.source !== "usda" && value.source !== "open-food-facts") ||
+    !boundedText(value.externalId, 16) ||
     !boundedText(value.name, 300) || !boundedText(value.brand, 200, true) ||
     !boundedText(value.attributionLabel, 200) ||
     !record(value.nutritionPer100g) || !Array.isArray(value.servingOptions) ||
     value.servingOptions.length > 20) return null;
+  const isOpenFoodFacts = value.source === "open-food-facts";
+  if (isOpenFoodFacts) {
+    if (!isValidProductBarcode(value.externalId) || value.barcode !== value.externalId) return null;
+  } else if (!/^\d+$/.test(String(value.externalId)) ||
+    !Number.isSafeInteger(Number(value.externalId)) || Number(value.externalId) <= 0) return null;
   const nutrition = value.nutritionPer100g;
   if (nutrients.some((key) => nutrition[key] !== null &&
     (typeof nutrition[key] !== "number" || !Number.isFinite(nutrition[key]) || nutrition[key] < 0))) return null;
@@ -36,12 +41,16 @@ export function validateTransportFood(value: unknown): FoodSearchResult | null {
     !boundedText(serving.id, 100) || !boundedText(serving.label, 200) ||
     typeof serving.grams !== "number" || !Number.isFinite(serving.grams) || serving.grams <= 0)) return null;
   if (!boundedText(value.defaultServingId, 100, true)) return null;
-  const sourceUrl = `https://fdc.nal.usda.gov/food-details/${Number(value.externalId)}/nutrients`;
+  const externalId = isOpenFoodFacts ? value.externalId as string : String(Number(value.externalId));
+  const sourceUrl = isOpenFoodFacts
+    ? `https://world.openfoodfacts.org/product/${externalId}`
+    : `https://fdc.nal.usda.gov/food-details/${externalId}/nutrients`;
   const normalized = normalizeFoodResult({
-    source: "usda", externalId: String(Number(value.externalId)), name: value.name,
+    source: value.source, externalId, name: value.name,
+    ...(isOpenFoodFacts ? { barcode: externalId } : {}),
     brand: value.brand, nutritionPer100g: nutrition, servingOptions: value.servingOptions,
     defaultServingId: value.defaultServingId,
-    attributionLabel: "FoodData Central, U.S. Department of Agriculture", sourceUrl,
+    attributionLabel: isOpenFoodFacts ? "Open Food Facts (ODbL)" : "FoodData Central, U.S. Department of Agriculture", sourceUrl,
   });
   return normalized;
 }

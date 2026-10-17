@@ -9,6 +9,11 @@ export type ValidationResult =
   | { ok: true; value: FoodSearchAction }
   | { ok: false; reason: string };
 
+// Common GTIN lengths: EAN-8, UPC-A, EAN-13 and GTIN-14. Keep strings intact.
+export function isProductCode(value: unknown): value is string {
+  return typeof value === "string" && [8, 12, 13, 14].includes(value.length) && !/[^0-9]/.test(value);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -62,8 +67,13 @@ export function validateFoodSearchRequest(input: unknown): ValidationResult {
     return { ok: false, reason: "invalid_request" };
   }
 
+  const provider = input.provider ?? "usda";
+  if (input.provider === null || (provider !== "usda" && provider !== "open-food-facts")) {
+    return { ok: false, reason: "invalid_provider" };
+  }
+
   if (input.action === "search") {
-    if (typeof input.query !== "string") {
+    if (typeof input.query !== "string" || /[\u0000-\u001f\u007f-\u009f]/.test(input.query)) {
       return { ok: false, reason: "invalid_query" };
     }
 
@@ -81,10 +91,25 @@ export function validateFoodSearchRequest(input: unknown): ValidationResult {
       ) {
         return { ok: false, reason: "invalid_page_size" };
       }
-      pageSize = Math.min(input.pageSize, MAX_PAGE_SIZE);
+      pageSize = Math.min(input.pageSize, provider === "open-food-facts" ? 10 : MAX_PAGE_SIZE);
     }
 
-    return { ok: true, value: { action: "search", query, pageSize } };
+    return {
+      ok: true,
+      value: provider === "open-food-facts"
+        ? { provider, action: "search", query, pageSize }
+        : { action: "search", query, pageSize },
+    };
+  }
+
+  if (provider === "open-food-facts") {
+    if (input.action === "detail" && isProductCode(input.externalId)) {
+      return { ok: true, value: { provider, action: "detail", externalId: input.externalId } };
+    }
+    if (input.action === "barcode" && isProductCode(input.barcode)) {
+      return { ok: true, value: { provider, action: "barcode", barcode: input.barcode } };
+    }
+    return { ok: false, reason: "invalid_action_or_code" };
   }
 
   if (input.action === "detail") {

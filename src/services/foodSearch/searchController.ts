@@ -7,7 +7,7 @@ export type SearchState =
   | { status: FoodSearchErrorKind; results: FoodSearchResult[] };
 
 // Only explicit submit performs I/O. Generations prevent old completions after reset/unmount.
-export function createSearchController(service: FoodSearchService, onState: (state: SearchState) => void) {
+export function createSearchController(service: Pick<FoodSearchService, "search" | "detail">, onState: (state: SearchState) => void) {
   let generation = 0;
   let pending = false;
   let draftQuery = "";
