@@ -11,6 +11,7 @@ const temporaryDirectory = await mkdtemp(
 
 const sourceFiles = [
   "src/types/foodSearch.ts",
+  "src/services/foodSearch/__tests__/foodSearchIntegration.test.ts",
   "src/services/foodSearch/normalizeFoodResult.ts",
   "src/services/foodSearch/calculateServingNutrition.ts",
   "src/services/foodSearch/__tests__/normalizeFoodResult.test.ts",
@@ -28,6 +29,7 @@ const sourceFiles = [
 ];
 
 const testFiles = [
+  "src/services/foodSearch/__tests__/foodSearchIntegration.test.js",
   "src/services/foodSearch/__tests__/normalizeFoodResult.test.js",
   "src/services/foodSearch/__tests__/calculateServingNutrition.test.js",
   "supabase/functions/food-search/__tests__/validation.test.js",

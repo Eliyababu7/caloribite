@@ -1,4 +1,6 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+
+import { deserializeFoodResult } from "../services/foodSearch/foodResultTransport";
 
 import {
   FoodEntryForm,
@@ -23,6 +25,9 @@ export default function ConfirmFoodScreen() {
   const { addFoodLog, isFoodLogMutationPending } = useFoodLogs();
 
   const loggedDate = resolveDiaryDateParam(params.loggedDate);
+
+  const foodResult = deserializeFoodResult(params.foodResult);
+  const invalidFoodResult = params.foodResult !== undefined && foodResult === null;
 
   const requestedMealType = getParamValue(params.mealType);
 
@@ -52,8 +57,12 @@ export default function ConfirmFoodScreen() {
     return succeeded;
   };
 
+  if (invalidFoodResult) return <Redirect href={{ pathname: "/add-food", params: { loggedDate } }} />;
+
   return (
     <FoodEntryForm
+      key={foodResult ? JSON.stringify(foodResult) : "starter"}
+      foodResult={foodResult ?? undefined}
       title="Confirm food"
       subtitle="Review and edit the nutrition details before saving this food to your diary."
       loggedDate={loggedDate}

@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,6 +11,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { foodSearchClient } from "../services/foodSearch/foodSearchClient";
+import { FOOD_SEARCH_MESSAGES, FoodSearchError, type FoodSearchErrorKind } from "../services/foodSearch/foodSearchService";
+import { serializeFoodResult } from "../services/foodSearch/foodResultTransport";
+import { createSearchController, type SearchState } from "../services/foodSearch/searchController";
+import type { FoodSearchResult } from "../types/foodSearch";
 import { STARTER_FOODS, type StarterFood } from "../data/starterFoods";
 import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
@@ -25,6 +31,63 @@ export default function SearchFoodScreen() {
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const [searchText, setSearchText] = useState("");
+  const [searchState, setSearchState] = useState<SearchState>({ status: "idle", results: [] });
+  const [controller] = useState(() => createSearchController(foodSearchClient, setSearchState));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectionError, setSelectionError] = useState<FoodSearchErrorKind | null>(null);
+  const [retryFood, setRetryFood] = useState<FoodSearchResult | null>(null);
+  const selectionGeneration = useRef(0);
+  const selectionPending = useRef(false);
+  const lastQuery = useRef("");
+  useEffect(() => () => {
+    controller.invalidate();
+    selectionGeneration.current++;
+  }, [controller]);
+
+  const invalidateSelection = () => {
+    selectionGeneration.current++;
+    selectionPending.current = false;
+    setSelectedId(null);
+    setSelectionError(null);
+    setRetryFood(null);
+  };
+  const submitSearch = (query = searchText) => {
+    if (controller.isPending()) return;
+    invalidateSelection();
+    lastQuery.current = query;
+    void controller.submit(query);
+  };
+  const leaveSearch = () => {
+    controller.invalidate();
+    setSearchState((state) => state.status === "loading" ? { status: "idle", results: [] } : state);
+    invalidateSelection();
+  };
+  const selectUsdaFood = async (food: FoodSearchResult) => {
+    if (selectionPending.current || !food.externalId) return;
+    selectionPending.current = true;
+    const generation = ++selectionGeneration.current;
+    setSelectedId(food.externalId);
+    setSelectionError(null);
+    setRetryFood(food);
+    try {
+      const detail = await foodSearchClient.detail(food.externalId);
+      if (generation !== selectionGeneration.current) return;
+      const foodResult = serializeFoodResult(detail);
+      if (!foodResult) throw new FoodSearchError("provider-error");
+      leaveSearch();
+      router.push({ pathname: "/confirm-food", params: { foodResult, loggedDate } });
+    } catch (error) {
+      if (generation === selectionGeneration.current) setSelectionError(error instanceof FoodSearchError ? error.kind : "provider-error");
+    } finally {
+      if (generation === selectionGeneration.current) {
+        selectionPending.current = false;
+        setSelectedId(null);
+      }
+    }
+  };
+  const searchError = searchState.status in FOOD_SEARCH_MESSAGES ? searchState.status as FoodSearchErrorKind : null;
+  const showStarterFoods = searchState.status === "idle" || searchState.status === "empty" || searchError !== null;
+  const nutrientText = (value: number | null, unit: string) => value === null ? "Unavailable" : `${value}${unit}`;
 
   const loggedDate = resolveDiaryDateParam(params.loggedDate);
 
@@ -41,6 +104,7 @@ export default function SearchFoodScreen() {
   }, [searchText]);
 
   const handleSelectFood = (food: StarterFood) => {
+    leaveSearch();
     router.push({
       pathname: "/confirm-food",
       params: {
@@ -55,6 +119,7 @@ export default function SearchFoodScreen() {
   };
 
   const handleManualEntry = () => {
+    leaveSearch();
     router.push({
       pathname: "/add-food",
       params: {
@@ -82,8 +147,7 @@ export default function SearchFoodScreen() {
         </Text>
 
         <Text style={styles.subtitle}>
-          Search our starter food database. Select a food, then confirm or edit
-          its nutrition details.
+          Search USDA foods, then review serving sizes and nutrition. Starter foods and manual entry are always available as fallbacks.
         </Text>
 
         <View style={styles.dateCard}>
@@ -98,20 +162,70 @@ export default function SearchFoodScreen() {
           placeholderTextColor={theme.colors.placeholder}
           selectionColor={theme.colors.accent}
           value={searchText}
-          onChangeText={setSearchText}
+          onChangeText={(value) => { setSearchText(value); controller.setQuery(value); }}
+          onSubmitEditing={() => submitSearch()}
+          maxLength={120}
           autoFocus
           returnKeyType="search"
           accessibilityLabel="Search foods"
         />
 
-        <View style={styles.resultsHeader}>
-          <Text style={styles.resultsTitle}>Results</Text>
+        <Pressable style={styles.searchButton} onPress={() => submitSearch()}
+          disabled={searchState.status === "loading"}
+          accessibilityRole="button" accessibilityLabel="Search USDA foods"
+          accessibilityState={{ disabled: searchState.status === "loading", busy: searchState.status === "loading" }}>
+          {searchState.status === "loading" ? <ActivityIndicator color={theme.colors.onBrand} accessibilityLabel="Searching USDA foods" /> :
+            <Text style={styles.searchButtonText}>Search</Text>}
+        </Pressable>
+        <Pressable
+          style={styles.manualButton}
+          onPress={handleManualEntry}
+          accessibilityRole="button"
+          accessibilityLabel="Add food manually"
+        >
+          <Text style={styles.manualButtonText}>Add food manually</Text>
+        </Pressable>
 
-          <Text style={styles.resultsCount} accessibilityLiveRegion="polite">
-            {filteredFoods.length} found
-          </Text>
+        <View accessibilityLiveRegion="polite">
+          {searchState.status === "idle" && <Text style={styles.emptyText}>Enter a food and press Search to find USDA results.</Text>}
+          {searchState.status === "loading" && <Text style={styles.emptyText}>Searching USDA foods...</Text>}
+          {searchState.status === "empty" && <Text style={styles.emptyText}>No USDA foods found. Try another query or add food manually.</Text>}
+          {searchError && <View style={styles.emptyCard}>
+            <Text style={styles.emptyText} accessibilityRole="alert">{FOOD_SEARCH_MESSAGES[searchError]}</Text>
+            {searchError !== "unauthorized" && searchError !== "invalid-query" &&
+              <Pressable style={styles.retryButton} accessibilityRole="button" accessibilityLabel="Retry USDA search" onPress={() => submitSearch(lastQuery.current)}>
+                <Text style={styles.selectText}>Retry search</Text>
+              </Pressable>}
+          </View>}
         </View>
-
+        {searchState.status === "results" && <>
+          <View style={styles.resultsHeader}>
+            <Text style={styles.resultsTitle}>USDA results</Text>
+            <Text style={styles.resultsCount}>{searchState.results.length} found</Text>
+          </View>
+          {searchState.results.map((food) => <Pressable key={food.externalId}
+            style={styles.foodCard} onPress={() => void selectUsdaFood(food)} disabled={selectedId !== null}
+            accessibilityRole="button" accessibilityLabel={`Select USDA ${food.name}`}
+            accessibilityHint="Loads serving and nutrition details" accessibilityState={{ disabled: selectedId !== null, busy: selectedId === food.externalId }}>
+            <View style={styles.foodInfo}>
+              <Text style={styles.selectText}>USDA</Text>
+              <Text style={styles.foodName}>{food.name}</Text>
+              {food.brand && <Text style={styles.foodMacros}>{food.brand}</Text>}
+              <Text style={styles.foodCalories}>{nutrientText(food.nutritionPer100g.calories, " kcal")} per 100 g</Text>
+              <Text style={styles.foodMacros}>P {nutrientText(food.nutritionPer100g.protein, " g")} | C {nutrientText(food.nutritionPer100g.carbs, " g")} | F {nutrientText(food.nutritionPer100g.fat, " g")}</Text>
+            </View>
+            {selectedId === food.externalId ? <ActivityIndicator color={theme.colors.accent} accessibilityLabel={`Loading ${food.name} details`} /> : <Text style={styles.selectText}>Select</Text>}
+          </Pressable>)}
+        </>}
+        {selectionError && <View style={styles.emptyCard}>
+          <Text style={styles.emptyText} accessibilityRole="alert">{FOOD_SEARCH_MESSAGES[selectionError]}</Text>
+          {selectionError !== "unauthorized" && retryFood && <Pressable style={styles.retryButton} accessibilityRole="button" accessibilityLabel="Retry loading food details" onPress={() => void selectUsdaFood(retryFood)}><Text style={styles.selectText}>Retry details</Text></Pressable>}
+        </View>}
+        {showStarterFoods && <>
+        <View style={styles.resultsHeader}>
+          <Text style={styles.resultsTitle}>Starter foods</Text>
+          <Text style={styles.resultsCount}>{filteredFoods.length} found</Text>
+        </View>
         {filteredFoods.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No food found</Text>
@@ -147,17 +261,12 @@ export default function SearchFoodScreen() {
           ))
         )}
 
-        <Pressable
-          style={styles.manualButton}
-          onPress={handleManualEntry}
-          accessibilityRole="button"
-          accessibilityLabel="Enter food manually"
-        >
-          <Text style={styles.manualButtonText}>Enter food manually</Text>
-        </Pressable>
+        </>}
+
+
 
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => { leaveSearch(); router.back(); }}
           accessibilityRole="button"
           accessibilityLabel="Back to diary"
           hitSlop={8}
@@ -173,6 +282,9 @@ function createStyles(theme: AppTheme) {
   const { colors } = theme;
 
   return StyleSheet.create({
+    searchButton: { minHeight: 52, backgroundColor: colors.brand, borderRadius: 999, alignItems: "center", justifyContent: "center", marginBottom: 20 },
+    searchButtonText: { color: colors.onBrand, fontSize: 16, fontWeight: "800" },
+    retryButton: { minHeight: 48, justifyContent: "center", paddingHorizontal: 12 },
     screen: {
       flex: 1,
       backgroundColor: colors.background,
@@ -331,6 +443,7 @@ function createStyles(theme: AppTheme) {
     },
 
     manualButton: {
+      marginBottom: 18,
       minHeight: 52,
       backgroundColor: colors.surface,
       borderWidth: 1,
@@ -351,6 +464,7 @@ function createStyles(theme: AppTheme) {
     },
 
     backText: {
+      minHeight: 48,
       color: colors.accent,
       textAlign: "center",
       fontSize: 15,
