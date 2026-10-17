@@ -11,6 +11,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { initialFoodServing, recalculateFoodInputs } from "../services/foodSearch/confirmationNutrition";
+import type { FoodSearchResult } from "../types/foodSearch";
 import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
 import type { MealType, NewFoodLog } from "../types/food";
@@ -31,6 +33,7 @@ type FoodEntryFormProps = {
   subtitle: string;
   loggedDate: string;
   initialValues?: FoodEntryInitialValues;
+  foodResult?: FoodSearchResult;
   submitLabel?: string;
   cancelLabel?: string;
   onSubmit: (foodLog: NewFoodLog) => Promise<boolean>;
@@ -80,6 +83,7 @@ export function FoodEntryForm({
   subtitle,
   loggedDate,
   initialValues = {},
+  foodResult,
   submitLabel = "Save to diary",
   cancelLabel = "Back",
   onSubmit,
@@ -90,31 +94,61 @@ export function FoodEntryForm({
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
+  const initialServing = foodResult ? initialFoodServing(foodResult) : { servingId: "", grams: "", quantity: "1" };
+  const providerInputs = foodResult ? recalculateFoodInputs(foodResult, initialServing.grams, initialServing.quantity) : null;
+  const [servingId, setServingId] = useState(initialServing.servingId);
+  const [servingGrams, setServingGrams] = useState(initialServing.grams);
+  const [quantity, setQuantity] = useState(initialServing.quantity);
   const [mealType, setMealType] = useState<MealType>(
     initialValues.mealType ?? getDefaultMealType(),
   );
 
   const [foodName, setFoodName] = useState(
-    getInputValue(initialValues.foodName),
+    getInputValue(foodResult?.name ?? initialValues.foodName),
   );
 
   const [calories, setCalories] = useState(
-    getInputValue(initialValues.calories),
+    getInputValue(providerInputs?.calories ?? initialValues.calories),
   );
 
-  const [protein, setProtein] = useState(getInputValue(initialValues.protein));
+  const [protein, setProtein] = useState(getInputValue(providerInputs?.protein ?? initialValues.protein));
 
-  const [carbs, setCarbs] = useState(getInputValue(initialValues.carbs));
-  const [fat, setFat] = useState(getInputValue(initialValues.fat));
+  const [carbs, setCarbs] = useState(getInputValue(providerInputs?.carbs ?? initialValues.carbs));
+  const [fat, setFat] = useState(getInputValue(providerInputs?.fat ?? initialValues.fat));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const submissionPending = useRef(false);
+
+  const recalculate = (grams: string, nextQuantity: string) => {
+    if (!foodResult) return;
+    const totals = recalculateFoodInputs(foodResult, grams, nextQuantity);
+    setCalories(totals.calories);
+    setProtein(totals.protein);
+    setCarbs(totals.carbs);
+    setFat(totals.fat);
+    setSubmitError(null);
+  };
 
   const handleSubmit = async () => {
     if (disabled || submissionPending.current) {
       return;
     }
 
+    if (foodResult) {
+      if (!Number.isFinite(Number(servingGrams)) || Number(servingGrams) <= 0 ||
+        !Number.isFinite(Number(quantity)) || Number(quantity) <= 0) {
+        setSubmitError("Enter a valid serving weight in grams and a quantity greater than zero.");
+        return;
+      }
+      if ([calories, protein, carbs, fat].some((value) => !value.trim() || !Number.isFinite(Number(value)) || Number(value) < 0)) {
+        setSubmitError("Enter a non-negative number for every nutrient. USDA values marked unavailable must be entered before saving.");
+        return;
+      }
+      if (!foodName.trim()) {
+        setSubmitError("Please enter a food name.");
+        return;
+      }
+    }
     const trimmedFoodName = foodName.trim();
 
     if (!trimmedFoodName) {
@@ -215,7 +249,9 @@ export function FoodEntryForm({
                 ]}
                 onPress={() => setMealType(meal)}
                 disabled={actionsDisabled}
-                accessibilityState={{ disabled: actionsDisabled }}
+                accessibilityRole="button"
+                accessibilityLabel={`${meal} meal`}
+                accessibilityState={{ disabled: actionsDisabled, selected: isSelected }}
               >
                 <Text
                   style={[
@@ -235,6 +271,8 @@ export function FoodEntryForm({
         <TextInput
           style={styles.input}
           value={foodName}
+          accessibilityLabel="Food name"
+          maxLength={300}
           onChangeText={setFoodName}
           placeholder="Food name"
           placeholderTextColor={theme.colors.placeholder}
@@ -242,14 +280,52 @@ export function FoodEntryForm({
           editable={!actionsDisabled}
         />
 
+        {foodResult && <>
+          <Text style={styles.label}>Serving</Text>
+          <Text style={styles.subtitle}>{foodResult.attributionLabel}{foodResult.brand ? ` | ${foodResult.brand}` : ""}</Text>
+          <View style={styles.mealRow}>
+            {foodResult.servingOptions.map((option) => <Pressable key={option.id}
+              style={[styles.mealChip, servingId === option.id && styles.mealChipActive]}
+              disabled={actionsDisabled} accessibilityRole="button"
+              accessibilityLabel={`${option.label}, ${option.grams} grams`}
+              accessibilityState={{ selected: servingId === option.id, disabled: actionsDisabled }}
+              onPress={() => {
+                if (servingId === option.id && servingGrams === String(option.grams)) return;
+                setServingId(option.id); setServingGrams(String(option.grams));
+                recalculate(String(option.grams), quantity);
+              }}>
+              <Text style={[styles.mealChipText, servingId === option.id && styles.mealChipTextActive]}>{option.label} ({option.grams} g)</Text>
+            </Pressable>)}
+          </View>
+          {!foodResult.servingOptions.length && <Text style={styles.subtitle}>
+            {initialServing.grams === "100" ? "No provider serving weight is available. Starting with an explicit 100 g serving." : "No reliable serving weight or per-100-g nutrition is available. Enter grams and nutrition manually."}
+          </Text>}
+          <Text style={styles.label}>Serving weight (g)</Text>
+          <TextInput style={styles.input} value={servingGrams} keyboardType="decimal-pad"
+            accessibilityLabel="Serving weight in grams" placeholder="Enter grams" maxLength={20}
+            placeholderTextColor={theme.colors.placeholder} selectionColor={theme.colors.accent}
+            editable={!actionsDisabled} onChangeText={(value) => {
+              if (value === servingGrams) return;
+              setServingId(""); setServingGrams(value); recalculate(value, quantity);
+            }} />
+          <Text style={styles.label}>Quantity</Text>
+          <TextInput style={styles.input} value={quantity} keyboardType="decimal-pad"
+            accessibilityLabel="Serving quantity" maxLength={20}
+            selectionColor={theme.colors.accent} editable={!actionsDisabled}
+            onChangeText={(value) => { if (value !== quantity) { setQuantity(value); recalculate(servingGrams, value); } }} />
+          <Text style={styles.subtitle}>Totals below are editable. Changing serving weight, serving option, or quantity recalculates from USDA nutrition and replaces your nutrient edits. Unavailable values must be entered before saving.</Text>
+        </>}
+
         <Text style={styles.label}>Calories</Text>
 
         <TextInput
           style={styles.input}
           value={calories}
+          accessibilityLabel="Calories"
+          maxLength={20}
           onChangeText={setCalories}
           keyboardType="decimal-pad"
-          placeholder="Calories"
+          placeholder={foodResult ? "Unavailable - enter value" : "Calories"}
           placeholderTextColor={theme.colors.placeholder}
           selectionColor={theme.colors.accent}
           editable={!actionsDisabled}
@@ -260,9 +336,11 @@ export function FoodEntryForm({
         <TextInput
           style={styles.input}
           value={protein}
+          accessibilityLabel="Protein in grams"
+          maxLength={20}
           onChangeText={setProtein}
           keyboardType="decimal-pad"
-          placeholder="Protein"
+          placeholder={foodResult ? "Unavailable - enter value" : "Protein"}
           placeholderTextColor={theme.colors.placeholder}
           selectionColor={theme.colors.accent}
           editable={!actionsDisabled}
@@ -273,9 +351,11 @@ export function FoodEntryForm({
         <TextInput
           style={styles.input}
           value={carbs}
+          accessibilityLabel="Carbohydrates in grams"
+          maxLength={20}
           onChangeText={setCarbs}
           keyboardType="decimal-pad"
-          placeholder="Carbs"
+          placeholder={foodResult ? "Unavailable - enter value" : "Carbs"}
           placeholderTextColor={theme.colors.placeholder}
           selectionColor={theme.colors.accent}
           editable={!actionsDisabled}
@@ -286,9 +366,11 @@ export function FoodEntryForm({
         <TextInput
           style={styles.input}
           value={fat}
+          accessibilityLabel="Fat in grams"
+          maxLength={20}
           onChangeText={setFat}
           keyboardType="decimal-pad"
-          placeholder="Fat"
+          placeholder={foodResult ? "Unavailable - enter value" : "Fat"}
           placeholderTextColor={theme.colors.placeholder}
           selectionColor={theme.colors.accent}
           editable={!actionsDisabled}
@@ -411,6 +493,8 @@ function createStyles(theme: AppTheme) {
     },
 
     mealChip: {
+      minHeight: 48,
+      justifyContent: "center",
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
@@ -476,6 +560,7 @@ function createStyles(theme: AppTheme) {
     },
 
     cancelText: {
+      minHeight: 48,
       color: colors.accent,
       textAlign: "center",
       fontSize: 15,
