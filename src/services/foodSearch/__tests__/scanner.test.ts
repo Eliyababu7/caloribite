@@ -100,3 +100,133 @@ for (const [permission, expected] of [[null, "loading"], [{ granted: false, canA
 test("web accepts secure contexts including localhost", () => assert.equal(webCameraProblem(true, true), null));
 test("insecure web context gives a safe fallback", () => assert.match(webCameraProblem(false, true)!, /HTTPS or localhost/));
 test("unsupported browser gives a safe fallback", () => assert.match(webCameraProblem(true, false)!, /manually/));
+
+// Render the actual component with mocked platform adapters and a minimal hook
+// host, keeping native availability regressions in the dependency-free test suite.
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { resolve } from "node:path";
+import { runInNewContext } from "node:vm";
+import type * as TypeScript from "typescript";
+
+function cameraHarness(platform: string, permission: { granted: boolean; canAskAgain: boolean; status: string } | null = { granted: true, canAskAgain: true, status: "granted" }, available = false) {
+  const requireProject = createRequire(resolve("package.json"));
+  const ts = requireProject("typescript") as typeof TypeScript;
+  const source = ts.transpileModule(readFileSync(resolve("src/components/FoodBarcodeScanner.tsx"), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  type Element = { type: string; props: Record<string, any> };
+  const slots: any[] = [];
+  let cursor = 0;
+  let effects: (() => void)[] = [];
+  let availabilityCalls = 0;
+  let settingsCalls = 0;
+  let lookupCalls = 0;
+  const getPermission = async () => permission;
+  const hook = (initial: any) => {
+    const index = cursor++;
+    if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;
+    return [slots[index], (value: any) => { slots[index] = value; }];
+  };
+  const adapters: Record<string, any> = {
+    react: {
+      useState: hook,
+      useRef: (value: any) => hook(() => ({ current: value }))[0],
+      useMemo: (factory: () => any) => factory(),
+      useEffect: (effect: () => void, deps?: any[]) => {
+        const index = cursor++;
+        if (!deps || !slots[index] || deps.some((dep, i) => dep !== slots[index][i])) effects.push(effect);
+        slots[index] = deps;
+      },
+    },
+    "react/jsx-runtime": { jsx: (type: string, props: any) => ({ type, props }), jsxs: (type: string, props: any) => ({ type, props }) },
+    "react-native": {
+      View: "View", Text: "Text", Pressable: "Pressable", ActivityIndicator: "ActivityIndicator",
+      Platform: { OS: platform }, StyleSheet: { create: (styles: any) => styles },
+      AccessibilityInfo: { announceForAccessibility() {}, sendAccessibilityEvent() {} },
+      BackHandler: { addEventListener: () => ({ remove() {} }) },
+      Linking: { openSettings: async () => { settingsCalls++; } },
+    },
+    "expo-camera": {
+      CameraView: Object.assign("CameraView", { isAvailableAsync: async () => { availabilityCalls++; return available; } }),
+      useCameraPermissions: () => [permission, async () => permission, getPermission],
+    },
+    "../theme/theme": { useAppTheme: () => ({ colors: {} }) },
+    "../services/foodSearch/cameraAccess": { cameraPermissionState, webCameraProblem },
+    "../services/foodSearch/foodSearchClient": { foodSearchClient: { barcode: async () => { lookupCalls++; return food; } } },
+    "../services/foodSearch/foodSearchService": { FOOD_SEARCH_MESSAGES: {} },
+    "../services/foodSearch/scannerController": { createScannerController, FOOD_BARCODE_TYPES, INITIAL_SCANNER_STATE: { status: "ready", barcode: "", foodResult: null } },
+  };
+  const exports: any = {};
+  runInNewContext(source, { exports, require: (name: string) => {
+    assert.ok(name in adapters, `Unexpected component import: ${name}`);
+    return adapters[name];
+  }, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, isSecureContext: true, navigator: { mediaDevices: { getUserMedia() {} } } });
+  let tree: Element;
+  function render() {
+    cursor = 0;
+    tree = exports.FoodBarcodeScanner({ onExit() {} });
+    const pending = effects; effects = []; pending.forEach((effect) => effect());
+  }
+  function nodes(node: any): Element[] {
+    if (!node || typeof node !== "object") return [];
+    if (Array.isArray(node)) return node.flatMap((child) => nodes(child));
+    return [node, ...nodes(node.props?.children)];
+  }
+  render();
+  return {
+    async settle() { await flush(); render(); await flush(); render(); },
+    camera: () => nodes(tree).find((node) => String(node.type) === "CameraView"),
+    text: () => nodes(tree).filter((node) => node.type === "Text").map((node) => node.props.children).join(" "),
+    button: (label: string) => nodes(tree).find((node) => node.type === "Pressable" && node.props.accessibilityLabel === label),
+    checking: () => nodes(tree).some((node) => node.props.accessibilityLabel === "Checking camera access"),
+    availabilityCalls: () => availabilityCalls,
+    settingsCalls: () => settingsCalls,
+    lookupCalls: () => lookupCalls,
+  };
+}
+
+for (const platform of ["android", "ios"]) {
+  test(`${platform} granted permission mounts rear camera without web availability and waits for onCameraReady`, async () => {
+    const h = cameraHarness(platform); await h.settle();
+    assert.equal(h.availabilityCalls(), 0);
+    assert.ok(h.camera()); assert.equal(h.camera()!.props.facing, "back");
+    assert.deepEqual(Array.from(h.camera()!.props.barcodeScannerSettings.barcodeTypes), [...FOOD_BARCODE_TYPES]);
+    assert.equal(h.checking(), true);
+    h.camera()!.props.onCameraReady(); await h.settle(); assert.equal(h.checking(), false);
+  });
+  test(`${platform} mount failure removes camera and offers recovery and manual entry`, async () => {
+    const h = cameraHarness(platform); await h.settle();
+    h.camera()!.props.onMountError({ message: "fixture failure" }); await h.settle();
+    assert.equal(h.camera(), undefined); assert.match(h.text(), /camera could not start/);
+    assert.ok(h.button("Enter barcode manually"));
+    h.button("Retry camera")!.props.onPress(); await h.settle(); assert.ok(h.camera());
+  });
+  for (const blocked of [false, true]) {
+    test(`${platform} ${blocked ? "blocked" : "denied"} permission preserves recovery actions`, async () => {
+      const h = cameraHarness(platform, { granted: false, canAskAgain: !blocked, status: "denied" }); await h.settle();
+      assert.equal(h.camera(), undefined);
+      assert.match(h.text(), blocked ? /permission is blocked/ : /access was denied/);
+      assert.equal(!!h.button("Allow camera access"), !blocked);
+      if (blocked) { h.button("Open device settings")!.props.onPress(); await h.settle(); assert.equal(h.settingsCalls(), 1); }
+    });
+  }
+}
+for (const available of [true, false]) {
+  test(`web checks isAvailableAsync and ${available ? "mounts" : "does not mount"} the camera`, async () => {
+    const h = cameraHarness("web", undefined, available); await h.settle();
+    assert.equal(h.availabilityCalls(), 1); assert.equal(!!h.camera(), available);
+    if (!available) assert.match(h.text(), /No camera is available/);
+  });
+}
+test("native permission loading keeps camera unmounted", async () => {
+  const h = cameraHarness("android", null); await h.settle();
+  assert.equal(h.camera(), undefined); assert.equal(h.checking(), true); assert.equal(h.availabilityCalls(), 0);
+});
+test("native repeated barcode callbacks invoke only one lookup after camera removal", async () => {
+  const h = cameraHarness("android"); await h.settle();
+  const scan = h.camera()!.props.onBarcodeScanned;
+  for (let i = 0; i < 20; i++) scan({ type: "ean13", data: CODE });
+  assert.equal(h.lookupCalls(), 0);
+  await h.settle(); assert.equal(h.camera(), undefined); assert.equal(h.lookupCalls(), 1);
+});

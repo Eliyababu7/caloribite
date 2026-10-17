@@ -99,7 +99,7 @@ async function runDomainTests() {
     const testRun = spawnSync(
       process.execPath,
       ["--test", ...testFiles.map((file) => join(temporaryDirectory, file))],
-      { cwd: temporaryDirectory, stdio: "inherit" },
+      { cwd: projectRoot, stdio: "inherit" },
     );
 
     if (testRun.error) {

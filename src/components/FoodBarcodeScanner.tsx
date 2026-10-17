@@ -1,6 +1,6 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, ActivityIndicator, BackHandler, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, ActivityIndicator, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { cameraPermissionState, webCameraProblem } from "../services/foodSearch/cameraAccess";
 import { foodSearchClient } from "../services/foodSearch/foodSearchClient";
 import { FOOD_SEARCH_MESSAGES } from "../services/foodSearch/foodSearchService";
@@ -23,6 +23,7 @@ export function FoodBarcodeScanner({ onExit }: { onExit: (destination: ScannerEx
   const [permissionQueryUnavailable, setPermissionQueryUnavailable] = useState(false);
   const [availability, setAvailability] = useState<"checking" | "available" | string>("checking");
   const [cameraError, setCameraError] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const permissionPending = useRef(false);
   const mounted = useRef(true);
@@ -47,12 +48,12 @@ export function FoodBarcodeScanner({ onExit }: { onExit: (destination: ScannerEx
     if (problem) setAvailability(problem);
     else {
       void getPermission().catch(() => { if (mounted.current) setPermissionQueryUnavailable(true); });
-      // Browsers can hide video devices until permission is granted. CameraView
-      // reports missing hardware through onMountError after the user allows access.
-      if (Platform.OS === "web") setAvailability("available");
+      // Native availability is determined by the mounted preview callbacks.
+      // isAvailableAsync is a web-only check.
+      if (Platform.OS !== "web") setAvailability("available");
       else void CameraView.isAvailableAsync().then((available) => {
-      if (mounted.current) setAvailability(available ? "available" : "No camera is available. Use a physical device or enter the barcode manually.");
-    }).catch(() => { if (mounted.current) setAvailability("Camera access is unavailable. Check browser or device camera settings, or enter the barcode manually."); });
+        if (mounted.current) setAvailability(available ? "available" : "No camera is available. Use a physical device or enter the barcode manually.");
+      }).catch(() => { if (mounted.current) setAvailability("Camera access is unavailable. Check browser or device camera settings, or enter the barcode manually."); });
     }
     return () => { mounted.current = false; controller.invalidate(); };
   }, [controller, getPermission]);
@@ -101,18 +102,22 @@ export function FoodBarcodeScanner({ onExit }: { onExit: (destination: ScannerEx
       <CameraView style={styles.camera} facing="back" mute barcodeScannerSettings={{ barcodeTypes: [...FOOD_BARCODE_TYPES] }}
         accessibilityLabel="Rear camera barcode preview"
         onBarcodeScanned={({ type, data }) => { controller.accept(type, data); }}
-        onMountError={() => { if (mounted.current && !exiting.current) setCameraError(true); }} />}
+        onCameraReady={() => { if (mounted.current && !exiting.current) setCameraReady(true); }}
+        onMountError={() => { if (mounted.current && !exiting.current) { setCameraReady(false); setCameraError(true); } }} />}
     <View accessibilityLiveRegion="polite">
-      {(availability === "checking" || (availability === "available" && access === "loading") || requesting) && <ActivityIndicator color={colors.accent} accessibilityLabel="Checking camera access" />}
+      {(availability === "checking" || (availability === "available" && access === "loading") || requesting || (availability === "available" && access === "ready" && !cameraError && !cameraReady && state.status === "ready" && !exit)) && <ActivityIndicator color={colors.accent} accessibilityLabel="Checking camera access" />}
       {availability !== "available" && availability !== "checking" && <Text style={styles.text} accessibilityRole="alert">{availability}</Text>}
       {availability === "available" && (access === "unrequested" || access === "denied") && <>
         <Text style={styles.text}>{access === "denied" ? "Camera access was denied. Allow access in your browser or device settings, then try again. Manual barcode entry is always available." : "Allow camera access to scan a food barcode. You can also enter the digits manually."}</Text>
         {button("Allow camera access", () => void allowCamera(), requesting)}
       </>}
-      {access === "blocked" && <Text style={styles.text} accessibilityRole="alert">Camera permission is blocked. Enable Camera for CaloriBite in your device Settings, or allow camera access in this site's browser settings, then reopen the scanner.</Text>}
+      {access === "blocked" && <>
+        <Text style={styles.text} accessibilityRole="alert">Camera permission is blocked. Enable Camera for CaloriBite in your device Settings, or allow camera access in this site's browser settings, then reopen the scanner.</Text>
+        {Platform.OS !== "web" && button("Open device settings", () => { void Linking.openSettings().catch(() => { if (mounted.current) setCameraError(true); }); })}
+      </>}
       {cameraError && <>
         <Text style={styles.text} accessibilityRole="alert">The camera could not start or scan in this browser or device. Check camera permission, close other camera apps, and try again. On web, use HTTPS or localhost.</Text>
-        {button("Retry camera", () => setCameraError(false))}
+        {button("Retry camera", () => { setCameraReady(false); setCameraError(false); })}
       </>}
       <Text style={styles.text} accessibilityRole={error ? "alert" : undefined}>{message}</Text>
       {state.barcode !== "" && <Text style={styles.text}>Barcode: {state.barcode}</Text>}
@@ -120,7 +125,7 @@ export function FoodBarcodeScanner({ onExit }: { onExit: (destination: ScannerEx
     </View>
     {error && <>
       {error !== "not-found" && button("Retry product lookup", () => void controller.retry())}
-      {button("Scan again", () => { setCameraError(false); controller.reset(); })}
+      {button("Scan again", () => { setCameraReady(false); setCameraError(false); controller.reset(); })}
     </>}
     {button("Enter barcode manually", () => close("manual-barcode"))}
     {button("Add food manually", () => close("manual-food"))}
