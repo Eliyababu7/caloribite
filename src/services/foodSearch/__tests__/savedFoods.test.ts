@@ -7,6 +7,8 @@ import { createUserFoodSearchService } from "../userFoodSearchService";
 import { createFoodSearchService, FoodSearchError } from "../foodSearchService";
 import { deserializeFoodResult, serializeFoodResult } from "../foodResultTransport";
 import { createScannerController, type ScannerState } from "../scannerController";
+import { createBarcodeCache } from "../barcodeCache";
+import { createBarcodeController, type BarcodeState } from "../barcodeController";
 
 const CODE = "0012345678905";
 const inputs = { calories: "200", protein: "5", carbs: "30", fat: "0" };
@@ -177,4 +179,92 @@ test("a saved-food read failure falls back to provider without writing or affect
   const provider = createFoodSearchService(async () => ({ data: { result: incompleteProduct() }, error: null }));
   const service = createUserFoodSearchService(provider, store, () => ({ userId: "a", generation: 1 }));
   assert.equal((await service.barcode(CODE)).source, "open-food-facts"); assert.equal(writes, 0);
+});
+
+for (const barcode of ["3046920022088", "0012345678905"]) {
+  test(`same-session scans prefer saved and updated nutrition over warm provider cache: ${barcode}`, async () => {
+    const storage = memoryStorage(); const store = createSavedFoodStore(storage);
+    const cache = createBarcodeCache(); let remoteCalls = 0; let cacheReads = 0;
+    const original = { ...incompleteProduct(), barcode, externalId: barcode };
+    const provider = createFoodSearchService(async () => {
+      remoteCalls++; return { data: { result: original }, error: null };
+    }, async () => true, 15000, { ...cache, get: (code) => { cacheReads++; return cache.get(code); } });
+    let providerCalls = 0;
+    const countedProvider = { ...provider, barcode: (code: string) => { providerCalls++; return provider.barcode(code); } };
+    let owner = { userId: "a", generation: 1 };
+    const service = createUserFoodSearchService(countedProvider, store, () => owner);
+    const states: ScannerState[] = [];
+    const scanner = createScannerController(service, (state) => states.push(state));
+    async function scan() {
+      scanner.reset(); assert.equal(scanner.accept("ean13", barcode), true);
+      await scanner.cameraStopped();
+      assert.equal(states.at(-1)?.status, "result");
+      return deserializeFoodResult(states.at(-1)?.foodResult)!;
+    }
+    const first = await scan();
+    assert.equal(first.nutritionPer100g.protein, null);
+    assert.equal(cache.get(barcode)?.nutritionPer100g.protein, null);
+    assert.equal(remoteCalls, 1);
+    const completedFood = completeBarcodeNutrition(first, inputs)!;
+    assert.equal(await service.saveFood(completedFood), true);
+    const readsBeforeSavedScan = cacheReads;
+    const second = await scan();
+    assert.equal(second.source, "custom"); assert.equal(second.savedForUserId, "a");
+    assert.equal(second.barcode, barcode); assert.equal(second.nutritionPer100g.protein, 5);
+    assert.equal(second.nutritionPer100g.fat, 0);
+    assert.equal(providerCalls, 1); assert.equal(remoteCalls, 1); assert.equal(cacheReads, readsBeforeSavedScan);
+    assert.equal(await service.saveFood({ ...completedFood, nutritionPer100g: { calories: 220, protein: 7, carbs: 35, fat: 0 } }), true);
+    assert.equal((await scan()).nutritionPer100g.protein, 7);
+    assert.equal(providerCalls, 1); assert.equal(cacheReads, readsBeforeSavedScan);
+    // The public cache remains unchanged; user B must still see provider data.
+    assert.equal(cache.get(barcode)?.source, "open-food-facts");
+    assert.equal(cache.get(barcode)?.nutritionPer100g.protein, null);
+    owner = { userId: "b", generation: 2 };
+    assert.equal((await scan()).source, "open-food-facts");
+    assert.equal((await scan()).nutritionPer100g.protein, null);
+    assert.equal(remoteCalls, 1); assert.equal(providerCalls, 3);
+    // A new store/client (cold start) still loads the persisted completion.
+    const cold = createUserFoodSearchService(provider, createSavedFoodStore(storage), () => ({ userId: "a", generation: 3 }));
+    assert.equal((await cold.barcode(barcode)).nutritionPer100g.protein, 7);
+    assert.equal(remoteCalls, 1);
+  });
+}
+
+test("saving while a warm-cache lookup resolves overrides the stale provider response", async () => {
+  const store = createSavedFoodStore(memoryStorage()); const cache = createBarcodeCache();
+  let remoteCalls = 0;
+  const provider = createFoodSearchService(async () => { remoteCalls++; return { data: { result: incompleteProduct() }, error: null }; }, async () => true, 15000, cache);
+  await provider.barcode(CODE);
+  let release!: () => void;
+  let reachedCache!: () => void;
+  const cacheReached = new Promise<void>((resolve) => { reachedCache = resolve; });
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const delayedProvider = { ...provider, barcode: async (code: string) => {
+    const cached = await provider.barcode(code); reachedCache(); await gate; return cached;
+  } };
+  const service = createUserFoodSearchService(delayedProvider, store, () => ({ userId: "a", generation: 1 }));
+  const states: BarcodeState[] = [];
+  const controller = createBarcodeController(service, (state) => states.push(state));
+  controller.setBarcode(CODE); const pending = controller.submit(); await cacheReached;
+  await service.saveFood(completed()); release(); await pending;
+  assert.equal(states.at(-1)?.product?.source, "custom");
+  assert.equal(states.at(-1)?.product?.nutritionPer100g.protein, 5);
+  assert.equal(remoteCalls, 1); assert.equal(cache.get(CODE)?.nutritionPer100g.protein, null);
+});
+
+test("account changes during the final saved-food check cannot expose saved nutrition", async () => {
+  const store = createSavedFoodStore(memoryStorage()); let reads = 0;
+  let release!: () => void; let checking!: () => void;
+  const finalCheck = new Promise<void>((resolve) => { checking = resolve; });
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const delayedStore = { ...store, find: async () => {
+    if (++reads === 1) return null;
+    checking(); await gate; return completed();
+  } };
+  let owner = { userId: "a", generation: 1 };
+  const provider = createFoodSearchService(async () => ({ data: { result: incompleteProduct() }, error: null }));
+  const service = createUserFoodSearchService(provider, delayedStore, () => owner);
+  const pending = service.barcode(CODE); await finalCheck;
+  owner = { userId: "b", generation: 2 }; release();
+  await assert.rejects(pending, (error: unknown) => error instanceof FoodSearchError && error.kind === "unauthorized");
 });

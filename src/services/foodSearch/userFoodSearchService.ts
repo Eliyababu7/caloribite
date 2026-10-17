@@ -20,7 +20,12 @@ export function createUserFoodSearchService(provider: FoodSearchService, store: 
       if (saved) return { ...saved, savedForUserId: owner.userId };
       const food = await provider.barcode(code);
       if (!isCurrent()) throw new FoodSearchError("unauthorized");
-      return food;
+      // A save can finish after the first storage read, while a cached or remote
+      // provider promise is resolving. Never publish that older provider snapshot
+      // without checking the account's latest committed nutrition again.
+      const latestSaved = await store.find(owner.userId, code).catch(() => null);
+      if (!isCurrent()) throw new FoodSearchError("unauthorized");
+      return latestSaved ? { ...latestSaved, savedForUserId: owner.userId } : food;
     },
     async saveFood(food: FoodSearchResult): Promise<boolean> {
       const owner = getOwner();
