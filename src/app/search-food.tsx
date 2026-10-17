@@ -31,7 +31,8 @@ export default function SearchFoodScreen() {
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const [showBarcode, setShowBarcode] = useState(false);
+  const [showBarcode, setShowBarcode] = useState(params.barcodeEntry === "1");
+  useEffect(() => { if (params.barcodeEntry === "1") setShowBarcode(true); }, [params.barcodeEntry]);
   const [searchText, setSearchText] = useState("");
   const [searchState, setSearchState] = useState<SearchState>({ status: "idle", results: [] });
   const [controller] = useState(() => createSearchController(foodSearchClient, setSearchState));
@@ -201,6 +202,10 @@ export default function SearchFoodScreen() {
           accessibilityLabel="Enter product barcode" accessibilityState={{ expanded: showBarcode }}
           onPress={() => setShowBarcode((visible) => !visible)}>
           <Text style={styles.manualButtonText}>{showBarcode ? "Close barcode entry" : "Enter product barcode"}</Text>
+        </Pressable>
+        <Pressable style={styles.manualButton} accessibilityRole="button" accessibilityLabel="Scan barcode"
+          onPress={() => { leaveSearch(); router.push({ pathname: "/scan-barcode", params: { loggedDate } }); }}>
+          <Text style={styles.manualButtonText}>Scan barcode</Text>
         </Pressable>
         {showBarcode && <BarcodeLookupPanel onContinue={handleBarcodeContinue} />}
 

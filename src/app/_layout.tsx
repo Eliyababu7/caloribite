@@ -168,6 +168,7 @@ function AppNavigator() {
           <Stack.Protected guard={onboardingStatus !== "required"}>
             <Stack.Screen name="dashboard" />
             <Stack.Screen name="search-food" />
+            <Stack.Screen name="scan-barcode" />
             <Stack.Screen name="add-food" />
             <Stack.Screen name="confirm-food" />
             <Stack.Screen name="nutrition-targets" />
