@@ -1,4 +1,6 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { randomUUID } from "expo-crypto";
+import { foodLogStorage } from "../services/foodLogs/localFoodLogStorage";
+import { visibleFoodLogs, type FoodLogEnvelope } from "../services/foodLogs/foodLogStorage";
 import {
   createContext,
   ReactNode,
@@ -9,7 +11,7 @@ import {
 } from "react";
 
 import { useAuth } from "./AuthContext";
-import type { FoodLog, MealType, NewFoodLog } from "../types/food";
+import type { FoodLog, NewFoodLog } from "../types/food";
 import {
   getLocalDateKey,
   parseLocalDateKey,
@@ -34,116 +36,14 @@ export type FoodStorageHydrationState =
   | "ready"
   | "error";
 
-const USER_STORAGE_KEY_PREFIX = "caloribite_food_logs:user:";
-const FOOD_STORAGE_ERROR_MESSAGE =
-  "Your food logs could not be loaded. Please try again.";
-
-const storageWriteQueues = new Map<string, Promise<void>>();
-
-const MEAL_TYPES: MealType[] = ["Breakfast", "Lunch", "Dinner", "Snack"];
-
+const FOOD_STORAGE_ERROR_MESSAGE = "Your food logs could not be loaded. Please try again.";
 const FoodLogContext = createContext<FoodLogContextType | undefined>(undefined);
 
-function isMealType(value: unknown): value is MealType {
-  return MEAL_TYPES.includes(value as MealType);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function migrateStoredFoodLog(storedFood: unknown): FoodLog | null {
-  if (typeof storedFood !== "object" || storedFood === null) {
-    return null;
-  }
-
-  const food = storedFood as Record<string, unknown>;
-
-  if (
-    typeof food.id !== "string" ||
-    food.id.trim().length === 0 ||
-    typeof food.foodName !== "string" ||
-    food.foodName.trim().length === 0 ||
-    typeof food.createdAt !== "string" ||
-    Number.isNaN(new Date(food.createdAt).getTime()) ||
-    !isFiniteNumber(food.calories) ||
-    !isFiniteNumber(food.protein) ||
-    !isFiniteNumber(food.carbs) ||
-    !isFiniteNumber(food.fat) ||
-    !isMealType(food.mealType) ||
-    typeof food.loggedDate !== "string" ||
-    parseLocalDateKey(food.loggedDate) === null
-  ) {
-    return null;
-  }
-
-  return {
-    id: food.id,
-    foodName: food.foodName,
-    calories: food.calories,
-    protein: food.protein,
-    carbs: food.carbs,
-    fat: food.fat,
-    mealType: food.mealType,
-    createdAt: food.createdAt,
-    loggedDate: food.loggedDate,
-  };
-}
-
-function parseStoredFoodLogs(savedFoodLogs: string): FoodLog[] {
-  const parsedFoodLogs: unknown = JSON.parse(savedFoodLogs);
-
-  if (!Array.isArray(parsedFoodLogs)) {
-    throw new Error("Stored food logs are not an array");
-  }
-
-  const foodLogs: FoodLog[] = [];
-
-  for (const storedFoodLog of parsedFoodLogs) {
-    const foodLog = migrateStoredFoodLog(storedFoodLog);
-
-    if (foodLog === null) {
-      throw new Error("Stored food logs contain an invalid record");
-    }
-
-    foodLogs.push(foodLog);
-  }
-
-  return foodLogs;
-}
-
-function enqueueStorageWrite(storageKey: string, foodLogs: FoodLog[]) {
-  const previousWrite = storageWriteQueues.get(storageKey) ?? Promise.resolve();
-  const write = previousWrite
-    .catch(() => undefined)
-    .then(() =>
-      AsyncStorage.setItem(storageKey, JSON.stringify(foodLogs)),
-    );
-
-  storageWriteQueues.set(storageKey, write);
-
-  const removeCompletedWrite = () => {
-    if (storageWriteQueues.get(storageKey) === write) {
-      storageWriteQueues.delete(storageKey);
-    }
-  };
-
-  void write.then(removeCompletedWrite, removeCompletedWrite);
-
-  return write;
-}
-
-async function waitForQueuedStorageWrite(storageKey: string) {
-  const queuedWrite = storageWriteQueues.get(storageKey);
-
-  if (queuedWrite) {
-    await queuedWrite.catch(() => undefined);
-  }
-}
-
 export function FoodLogProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  const userId = user?.id ?? null;
+  const { authIdentity } = useAuth();
+  const userId = authIdentity?.userId ?? null;
+  const currentIdentity = useRef(authIdentity);
+  currentIdentity.current = authIdentity;
   const [storedFoodLogs, setStoredFoodLogs] = useState<FoodLog[]>([]);
   const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
   const [failedUserId, setFailedUserId] = useState<string | null>(null);
@@ -151,6 +51,7 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
   const [retryCount, setRetryCount] = useState(0);
   const loadGeneration = useRef(0);
   const currentUserId = useRef<string | null>(userId);
+  const readyIdentity = useRef(authIdentity);
   const readyUserId = useRef<string | null>(null);
   const currentFoodLogs = useRef<FoodLog[]>([]);
   const activeMutations = useRef(new Map<string, symbol>());
@@ -170,30 +71,25 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const storageKey = `${USER_STORAGE_KEY_PREFIX}${userId}`;
+    const owner = authIdentity;
+    const isCurrent = () => currentIdentity.current === owner && loadGeneration.current === generation;
 
     const loadSavedFoodLogs = async () => {
       try {
-        await waitForQueuedStorageWrite(storageKey);
+        const envelope = await foodLogStorage.update(userId, isCurrent);
+        const loadedFoodLogs = visibleFoodLogs(envelope);
 
-        if (loadGeneration.current !== generation) {
-          return;
-        }
-
-        const scopedFoodLogs = await AsyncStorage.getItem(storageKey);
-        const loadedFoodLogs =
-          scopedFoodLogs === null ? [] : parseStoredFoodLogs(scopedFoodLogs);
-
-        if (loadGeneration.current === generation) {
+        if (isCurrent()) {
           currentFoodLogs.current = loadedFoodLogs;
           readyUserId.current = userId;
+          readyIdentity.current = authIdentity;
           setStoredFoodLogs(loadedFoodLogs);
           setLoadedUserId(userId);
         }
       } catch (error) {
         console.log("Failed to load food logs:", error);
 
-        if (loadGeneration.current === generation) {
+        if (isCurrent()) {
           currentFoodLogs.current = [];
           readyUserId.current = null;
           setStoredFoodLogs([]);
@@ -210,9 +106,9 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
         loadGeneration.current += 1;
       }
     };
-  }, [retryCount, userId]);
+  }, [retryCount, authIdentity, userId]);
 
-  const canAccessFoodLogs = userId !== null && loadedUserId === userId;
+  const canAccessFoodLogs = userId !== null && loadedUserId === userId && readyIdentity.current === authIdentity;
   const foodLogs = canAccessFoodLogs ? storedFoodLogs : [];
 
   const foodStorageHydrationState: FoodStorageHydrationState =
@@ -220,7 +116,7 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
       ? "signed-out"
       : failedUserId === userId
         ? "error"
-        : loadedUserId === userId
+        : canAccessFoodLogs
           ? "ready"
           : "loading";
 
@@ -230,7 +126,7 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
       : null;
 
   const currentStorageKey =
-    userId === null ? null : `${USER_STORAGE_KEY_PREFIX}${userId}`;
+    userId === null ? null : userId;
   const isFoodLogMutationPending =
     currentStorageKey !== null &&
     activeMutations.current.has(currentStorageKey);
@@ -244,11 +140,14 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
   const persistFoodLogs = async (
     mutationUserId: string,
     mutationGeneration: number,
-    nextFoodLogs: FoodLog[],
+    operation: (isCurrent: () => boolean) => Promise<FoodLogEnvelope>,
   ) => {
-    const storageKey = `${USER_STORAGE_KEY_PREFIX}${mutationUserId}`;
+    const storageKey = mutationUserId;
+    const owner = authIdentity;
+    const isCurrent = () => currentIdentity.current === owner && loadGeneration.current === mutationGeneration;
 
     if (
+      !isCurrent() || readyIdentity.current !== owner ||
       activeMutations.current.has(storageKey) ||
       currentUserId.current !== mutationUserId ||
       readyUserId.current !== mutationUserId
@@ -261,10 +160,11 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
     setMutationStateVersion((version) => version + 1);
 
     try {
-      await enqueueStorageWrite(storageKey, nextFoodLogs);
+      const envelope = await operation(isCurrent);
+      const nextFoodLogs = visibleFoodLogs(envelope);
 
       if (
-        currentUserId.current !== mutationUserId ||
+        !isCurrent() || currentUserId.current !== mutationUserId ||
         readyUserId.current !== mutationUserId ||
         loadGeneration.current !== mutationGeneration
       ) {
@@ -302,16 +202,16 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
       requestedLoggedDate <= todayDateKey;
 
     const newFoodLog: FoodLog = {
-      id: Date.now().toString(),
+      ...foodLog,
+      id: randomUUID(),
       createdAt: now.toISOString(),
       loggedDate: canUseRequestedDate ? requestedLoggedDate : todayDateKey,
-      ...foodLog,
     };
 
     return persistFoodLogs(
       userId,
       loadGeneration.current,
-      [newFoodLog, ...currentFoodLogs.current],
+      isCurrent => foodLogStorage.add(userId, isCurrent, newFoodLog),
     );
   };
 
@@ -323,7 +223,7 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
     return persistFoodLogs(
       userId,
       loadGeneration.current,
-      currentFoodLogs.current.filter((food) => food.id !== id),
+      isCurrent => foodLogStorage.remove(userId, isCurrent, [id]),
     );
   };
 
@@ -332,13 +232,9 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    return persistFoodLogs(
-      userId,
-      loadGeneration.current,
-      currentFoodLogs.current.filter(
-        (food) => food.loggedDate !== loggedDate,
-      ),
-    );
+    const ids = currentFoodLogs.current.filter(food => food.loggedDate === loggedDate).map(food => food.id);
+    return persistFoodLogs(userId, loadGeneration.current,
+      isCurrent => foodLogStorage.remove(userId, isCurrent, ids));
   };
 
   return (

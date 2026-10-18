@@ -10,6 +10,8 @@ const temporaryDirectory = await mkdtemp(
 );
 
 const sourceFiles = [
+  "src/services/foodLogs/__tests__/foodLogStorage.test.ts",
+  "src/services/foodLogs/__tests__/foodLogContext.test.ts",
   "src/services/foodSearch/__tests__/personalLibrary.test.ts",
   "src/services/foodSearch/__tests__/personalLibraryUi.test.ts",
   "src/services/foodSearch/__tests__/savedFoods.test.ts",
@@ -40,6 +42,8 @@ const sourceFiles = [
 ];
 
 const testFiles = [
+  "src/services/foodLogs/__tests__/foodLogStorage.test.js",
+  "src/services/foodLogs/__tests__/foodLogContext.test.js",
   "src/services/foodSearch/__tests__/personalLibrary.test.js",
   "src/services/foodSearch/__tests__/personalLibraryUi.test.js",
   "src/services/foodSearch/__tests__/savedFoods.test.js",

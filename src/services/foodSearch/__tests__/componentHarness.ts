@@ -22,6 +22,7 @@ export function componentHarness(file: string, exportName: string, initialProps:
     return [slots[index], (value: any) => { slots[index] = typeof value === "function" ? value(slots[index]) : value; }];
   };
   const react = {
+    createContext: () => ({ Provider: "ContextProvider" }),
     useState: hook,
     useRef: (value: any) => hook(() => ({ current: value }))[0],
     useMemo: (factory: () => any, deps: any[]) => {
