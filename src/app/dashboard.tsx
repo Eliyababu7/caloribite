@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { DiaryCloudBackup } from "../components/DiaryCloudBackup";
 import { DateNavigator } from "../components/DateNavigator";
 import { MacroCard } from "../components/MacroCard";
 import { MealSection } from "../components/MealSection";
@@ -308,6 +309,8 @@ export default function DashboardScreen() {
             {visibleSignOutError}
           </Text>
         )}
+
+        <DiaryCloudBackup />
 
         <View style={styles.titleRow}>
           <Text style={styles.title} accessibilityRole="header">

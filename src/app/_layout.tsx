@@ -11,6 +11,7 @@ import {
   SafeAreaView,
 } from "react-native-safe-area-context";
 
+import { FoodLogSyncProvider } from "../context/FoodLogSyncContext";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import {
   FoodLogProvider,
@@ -189,7 +190,9 @@ export default function RootLayout() {
         <HealthProfileProvider>
           <NutritionTargetsProvider>
             <FoodLogProvider>
-              <AppNavigator />
+              <FoodLogSyncProvider>
+                <AppNavigator />
+              </FoodLogSyncProvider>
             </FoodLogProvider>
           </NutritionTargetsProvider>
         </HealthProfileProvider>

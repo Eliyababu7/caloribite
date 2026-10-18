@@ -6,6 +6,8 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 import type * as TypeScript from "typescript";
+import { mergeFoodLogChanges } from "../foodLogReconciliation";
+import { row } from "./syncFixtures";
 import { componentHarness } from "../../foodSearch/__tests__/componentHarness";
 import { createFoodLogStorage, foodLogSyncKey, legacyFoodLogKey } from "../foodLogStorage";
 import * as storageModule from "../foodLogStorage";
@@ -118,4 +120,16 @@ test("production storage adapter initializes and mutates with only local depende
     ...input, id: randomUUID(), createdAt: "2024-01-01T00:00:00Z", loggedDate: "2024-01-01",
   });
   assert.equal(added.entries.length, 1);
+});
+
+test("committed background merges publish into the current diary without changing local hydration", async () => {
+  const f = setup(); await f.h.settle();
+  await f.value().addFoodLog(input,"2024-02-03"); f.h.render();
+  const existing = f.value().foodLogs[0];
+  const remote = row(undefined,1,{user_id:f.firstUser,food_name:"Remote meal"});
+  await f.service.update(f.firstUser,()=>true,latest=>mergeFoodLogChanges(latest,[remote])); f.h.render();
+  assert.equal(f.value().foodStorageHydrationState,"ready");
+  assert.deepEqual(JSON.parse(JSON.stringify(f.value().foodLogs[0])),JSON.parse(JSON.stringify(existing))); assert.equal(f.value().foodLogs[1].id,remote.id);
+  await f.service.add(randomUUID(),()=>true,{...existing,id:randomUUID()}); f.h.render();
+  assert.equal(f.value().foodLogs.length,2); f.h.dispose();
 });

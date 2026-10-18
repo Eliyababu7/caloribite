@@ -150,12 +150,16 @@ test("engine/repository imports have no client, storage, environment or network 
     assert.ok(requireCalls.every(name=>!name.includes("supabaseClient")&&!name.includes("async-storage")));
   }
 });
-test("runtime import graph never reaches repository or engine from any app entry point",()=>{
+test("runtime repository and engine imports stay inside the dedicated synchronization boundary",()=>{
   const ts=createRequire(resolve("package.json"))("typescript") as typeof TypeScript;
   const forbidden=new Set([resolve("src/services/supabase/foodLogsRepository.ts"),resolve("src/services/foodLogs/foodLogSync.ts")]);
   const visited=new Set<string>();
-  function visit(file:string){
-    file=resolve(file);assert.ok(!forbidden.has(file),`Runtime wiring: ${relative(process.cwd(),file)}`);
+  function visit(file:string,parent?:string){
+    file=resolve(file);
+    if (forbidden.has(file)) {
+      const allowed = [resolve("src/services/foodLogs/foodLogBackupCoordinator.ts"), resolve("src/services/foodLogs/foodLogSync.ts"), resolve("src/context/FoodLogSyncContext.tsx")];
+      assert.ok(parent && allowed.includes(parent),`Unexpected runtime wiring: ${relative(process.cwd(),file)}`);
+    }
     if(visited.has(file))return;visited.add(file);
     const ast=ts.createSourceFile(file,readFileSync(file,"utf8"),ts.ScriptTarget.Latest,true);
     for(const node of ast.statements){
@@ -163,7 +167,7 @@ test("runtime import graph never reaches repository or engine from any app entry
       const name=node.moduleSpecifier.text;if(!name.startsWith("."))continue;
       const root=resolve(file,"..",name);
       const target=[root+".ts",root+".tsx",resolve(root,"index.ts")].find(p=>{try{return !!readFileSync(p);}catch{return false;}});
-      if(target)visit(target);
+      if(target)visit(target,file);
     }
   }
   for(const directory of ["src/app","src/context","src/components"]){

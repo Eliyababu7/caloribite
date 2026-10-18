@@ -74,6 +74,12 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
     const owner = authIdentity;
     const isCurrent = () => currentIdentity.current === owner && loadGeneration.current === generation;
 
+    const unsubscribe = foodLogStorage.subscribe(userId, envelope => {
+      if (!isCurrent() || readyUserId.current !== userId || readyIdentity.current !== authIdentity) return;
+      const logs = visibleFoodLogs(envelope);
+      currentFoodLogs.current = logs;
+      setStoredFoodLogs(logs);
+    });
     const loadSavedFoodLogs = async () => {
       try {
         const envelope = await foodLogStorage.update(userId, isCurrent);
@@ -102,6 +108,7 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
     void loadSavedFoodLogs();
 
     return () => {
+      unsubscribe();
       if (loadGeneration.current === generation) {
         loadGeneration.current += 1;
       }
@@ -160,8 +167,7 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
     setMutationStateVersion((version) => version + 1);
 
     try {
-      const envelope = await operation(isCurrent);
-      const nextFoodLogs = visibleFoodLogs(envelope);
+      await operation(isCurrent);
 
       if (
         !isCurrent() || currentUserId.current !== mutationUserId ||
@@ -171,8 +177,7 @@ export function FoodLogProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      currentFoodLogs.current = nextFoodLogs;
-      setStoredFoodLogs(nextFoodLogs);
+      // The scoped storage observer publishes the latest durable envelope.
       return true;
     } catch (error) {
       console.log("Failed to save food logs:", error);

@@ -7,7 +7,7 @@ import type * as TypeScript from "typescript";
 
 // A small hook host for exercising actual component handlers without installing
 // a native renderer. Native widgets and child components are adapter boundaries.
-export function componentHarness(file: string, exportName: string, initialProps: Record<string, any>, adapters: Record<string, any>) {
+export function componentHarness(file: string, exportName: string, initialProps: Record<string, any>, adapters: Record<string, any>, globals: Record<string, any> = {}) {
   const ts = createRequire(resolve("package.json"))("typescript") as typeof TypeScript;
   const code = ts.transpileModule(readFileSync(resolve(file), "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
@@ -43,7 +43,7 @@ export function componentHarness(file: string, exportName: string, initialProps:
     jsx: (type: any, props: any) => ({ type, props }), jsxs: (type: any, props: any) => ({ type, props }),
   } };
   const exports: any = {};
-  runInNewContext(code, { exports, require: (name: string) => {
+  runInNewContext(code, { ...globals, exports, require: (name: string) => {
     assert.ok(name in modules, `Unexpected component dependency ${name}`);
     return modules[name as keyof typeof modules];
   } });

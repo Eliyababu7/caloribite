@@ -80,6 +80,7 @@ export function parseEnvelope(raw: string, userId: string): FoodLogEnvelope {
 // All hydration, migration and future acknowledgements/reconciliation share this
 // read-latest/write-once queue. No caller writes a captured array snapshot.
 export function createFoodLogStorage(storage: Storage, uuid: () => string) {
+  const listeners = new Map<string, Set<(envelope: FoodLogEnvelope) => void>>();
   function update(userId: string, isCurrent: () => boolean,
     transform: (latest: FoodLogEnvelope) => FoodLogEnvelope = value => value): Promise<FoodLogEnvelope> {
     const key = foodLogSyncKey(userId);
@@ -114,6 +115,9 @@ export function createFoodLogStorage(storage: Storage, uuid: () => string) {
       // into a different authentication generation.
       if (raw !== encoded) await storage.setItem(key, encoded);
       guard();
+      if (raw !== encoded) for (const listener of [...(listeners.get(userId) ?? [])]) {
+        try { listener(next); } catch { /* Observers never fail a durable local write. */ }
+      }
       return next;
     });
     queues.set(key, work);
@@ -122,6 +126,11 @@ export function createFoodLogStorage(storage: Storage, uuid: () => string) {
     return work;
   }
   return {
+    subscribe(userId: string, listener: (envelope: FoodLogEnvelope) => void) {
+      const scoped = listeners.get(userId) ?? new Set();
+      scoped.add(listener); listeners.set(userId, scoped);
+      return () => { scoped.delete(listener); if (!scoped.size) listeners.delete(userId); };
+    },
     update,
     add(userId: string, isCurrent: () => boolean, food: FoodLog) {
       return update(userId, isCurrent, latest => ({ ...latest,
