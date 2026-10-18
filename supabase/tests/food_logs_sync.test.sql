@@ -33,6 +33,12 @@ select ok(not has_function_privilege('anon', 'public.apply_food_log_mutations(js
 select ok(not has_function_privilege('anon', 'public.pull_food_log_changes(bigint,integer,bigint)', 'execute'), 'anon has no pull grant');
 select ok(not has_function_privilege('service_role', 'public.apply_food_log_mutations(jsonb)', 'execute'), 'service role is not granted apply execution');
 select ok(not has_function_privilege('service_role', 'public.pull_food_log_changes(bigint,integer,bigint)', 'execute'), 'service role is not granted pull execution');
+select ok(has_function_privilege('authenticated', 'public.apply_food_log_mutations(jsonb)', 'execute'), 'authenticated has apply execution');
+select ok(has_function_privilege('authenticated', 'public.pull_food_log_changes(bigint,integer,bigint)', 'execute'), 'authenticated has pull execution');
+select is((select count(*)::integer from pg_proc p cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+  where p.oid in ('public.apply_food_log_mutations(jsonb)'::regprocedure, 'public.pull_food_log_changes(bigint,integer,bigint)'::regprocedure)
+    and a.privilege_type = 'EXECUTE' and a.grantee <> p.proowner and a.grantee <> 'authenticated'::regrole),
+  0, 'only authenticated has non-owner RPC execution grants, including no PUBLIC grant');
 select ok((select prosecdef and proconfig = array['search_path=""'] from pg_proc where oid = 'public.apply_food_log_mutations(jsonb)'::regprocedure), 'apply definer has empty search path');
 select ok((select prosecdef and proconfig = array['search_path=""'] from pg_proc where oid = 'public.pull_food_log_changes(bigint,integer,bigint)'::regprocedure), 'pull definer has empty search path');
 
