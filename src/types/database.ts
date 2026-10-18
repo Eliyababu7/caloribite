@@ -9,6 +9,81 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      food_log_sync_state: {
+        Row: {
+          revision: number
+          user_id: string
+        }
+        Insert: {
+          revision?: number
+          user_id: string
+        }
+        Update: {
+          revision?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      food_logs: {
+        Row: {
+          calories: number
+          carbs: number
+          client_created_at: string
+          deleted_at: string | null
+          fat: number
+          food_name: string
+          id: string
+          last_mutation_id: string
+          legacy_local_id: string | null
+          logged_date: string
+          meal_type: string
+          originating_device_id: string | null
+          protein: number
+          received_at: string
+          server_revision: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          calories: number
+          carbs: number
+          client_created_at: string
+          deleted_at?: string | null
+          fat: number
+          food_name: string
+          id: string
+          last_mutation_id: string
+          legacy_local_id?: string | null
+          logged_date: string
+          meal_type: string
+          originating_device_id?: string | null
+          protein: number
+          received_at: string
+          server_revision: number
+          updated_at: string
+          user_id: string
+        }
+        Update: {
+          calories?: number
+          carbs?: number
+          client_created_at?: string
+          deleted_at?: string | null
+          fat?: number
+          food_name?: string
+          id?: string
+          last_mutation_id?: string
+          legacy_local_id?: string | null
+          logged_date?: string
+          meal_type?: string
+          originating_device_id?: string | null
+          protein?: number
+          received_at?: string
+          server_revision?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       nutrition_targets: {
         Row: {
           calories: number
@@ -47,6 +122,34 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_food_log_mutations: {
+        Args: { p_mutations: Json }
+        Returns: {
+          calories: number
+          carbs: number
+          client_created_at: string
+          deleted_at: string | null
+          fat: number
+          food_name: string
+          id: string
+          last_mutation_id: string
+          legacy_local_id: string | null
+          logged_date: string
+          meal_type: string
+          originating_device_id: string | null
+          protein: number
+          received_at: string
+          server_revision: number
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "food_logs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       apply_nutrition_targets: {
         Args: {
           p_base_revision: number
@@ -72,6 +175,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      pull_food_log_changes: {
+        Args: {
+          p_after_revision?: number
+          p_page_size?: number
+          p_watermark?: number
+        }
+        Returns: Json
       }
     }
     Enums: {
