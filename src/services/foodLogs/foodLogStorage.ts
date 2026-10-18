@@ -1,7 +1,8 @@
+import { FoodLogSyncError, isRevision, parseServerFoodLog, sameFood, serverFood, type ServerFoodLog } from "./foodLogSyncTypes";
 import type { FoodLog } from "../../types/food";
 import { parseLocalDateKey } from "../../utils/date";
 
-export type SyncEntry = { food: FoodLog; legacyId: string | null };
+export type SyncEntry = { food: FoodLog; legacyId: string | null; server?: ServerFoodLog };
 export type FoodLogEnvelope = {
   version: 1;
   userId: string;
@@ -9,11 +10,12 @@ export type FoodLogEnvelope = {
   migration: { sourceKey: string; importedCount: number };
   outbox: { id: string; entryId: string; kind: "create" | "delete" }[];
   tombstones: string[];
-  pull: { cursor: string | null };
+  pull: { cursor: string | null; watermark?: number | null };
+  acknowledgements?: { operationId: string; entryId: string }[];
 };
 type Storage = { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void> };
 const queues = new Map<string, Promise<unknown>>();
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const validUuid = (value: unknown): value is string => typeof value === "string" && uuidPattern.test(value);
 export const legacyFoodLogKey = (userId: string) => `caloribite_food_logs:user:${userId}`;
 export const foodLogSyncKey = (userId: string) => `caloribite_food_log_sync:user:${userId}`;
@@ -45,6 +47,11 @@ export function parseEnvelope(raw: string, userId: string): FoodLogEnvelope {
     if (!entry || !(entry.legacyId === null || typeof entry.legacyId === "string")) throw new Error("Invalid migration metadata");
     validateFoodLog(entry.food);
     if (!validUuid(entry.food.id) || ids.has(entry.food.id)) throw new Error("Invalid entry identity");
+    if (entry.server !== undefined) {
+      const row = parseServerFoodLog(entry.server, userId);
+      if (row.deleted_at !== null && !e.tombstones.includes(entry.food.id)) throw new Error("Missing terminal deletion marker");
+      if (!sameFood(entry.food, serverFood(row))) throw new Error("Invalid server snapshot");
+    }
     ids.add(entry.food.id);
   }
   if (e.migration.importedCount !== e.entries.filter(entry => entry.legacyId !== null).length) throw new Error("Invalid migration count");
@@ -54,6 +61,18 @@ export function parseEnvelope(raw: string, userId: string): FoodLogEnvelope {
     if (!op || !validUuid(op.id) || operations.has(op.id) || !ids.has(op.entryId) ||
         !["create", "delete"].includes(op.kind) || (op.kind === "delete" && !e.tombstones.includes(op.entryId))) throw new Error("Invalid outbox");
     operations.add(op.id);
+  }
+  if (e.pull.watermark !== undefined && e.pull.watermark !== null && !isRevision(e.pull.watermark)) throw new Error("Invalid pull watermark");
+  if (e.acknowledgements !== undefined) {
+    if (!Array.isArray(e.acknowledgements)) throw new Error("Invalid acknowledgements");
+    const acknowledged = new Set<string>();
+    for (const receipt of e.acknowledgements) {
+      const op = e.outbox.find(op => op.id === receipt?.operationId);
+      const entry = e.entries.find(entry => entry.food.id === receipt?.entryId);
+      if (!receipt || acknowledged.has(receipt.operationId) || !op || op.entryId !== receipt.entryId ||
+          !entry?.server || (op.kind === "delete" && !entry.server.deleted_at)) throw new Error("Invalid acknowledgement");
+      acknowledged.add(receipt.operationId);
+    }
   }
   return e;
 }
@@ -66,7 +85,7 @@ export function createFoodLogStorage(storage: Storage, uuid: () => string) {
     const key = foodLogSyncKey(userId);
     const previous = queues.get(key) ?? Promise.resolve();
     const work = previous.catch(() => undefined).then(async () => {
-      const guard = () => { if (!isCurrent()) throw new Error("Stale food log owner"); };
+      const guard = () => { if (!isCurrent()) throw new FoodLogSyncError("stale"); };
       guard();
       const raw = await storage.getItem(key);
       guard();
