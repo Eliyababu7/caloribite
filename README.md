@@ -158,6 +158,7 @@ The app requires these Expo public variables:
 | --- | --- |
 | `EXPO_PUBLIC_SUPABASE_URL` | Public API URL for the Supabase project |
 | `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable client key used with row-level security |
+| `EXPO_PUBLIC_FOOD_LOG_CLOUD_SYNC_ENABLED` | Food-log backup rollout, disabled unless exactly `true`; default `false` |
 
 Variables prefixed with `EXPO_PUBLIC_` are included in the client bundle and
 must not contain secrets. Real environment files are ignored by Git; only the
@@ -181,21 +182,33 @@ npm audit
 CaloriBite is an in-development product prototype. The flows listed under
 Current features are implemented, but the app has not yet been presented here
 as a production release. Food logs and health profiles are device-local;
-nutrition targets are the only app records currently synchronized to Supabase.
+nutrition targets synchronize to Supabase. Optional food-log cloud backup is
+implemented behind a rollout flag that remains disabled by default.
 
 ## Planned features
 
 The following items are planned and are not implemented in this repository:
 
 - A broader food data source and barcode-assisted lookup
-- Cross-device synchronization for food logs and health profiles
+- Health-profile synchronization and broader cross-device features
 - Deeper progress insights and reporting
 - Production release, monitoring, and account-management workflows
 
 ## Privacy and security
 
 - Health profiles and food logs are stored locally on the user's device and
-  scoped to the authenticated account ID.
+  scoped to the authenticated account ID. Diary use stays available offline.
+- Diary cloud backup requires both an exact `true` rollout flag and explicit
+  account-specific confirmation in the dashboard's Diary cloud backup section.
+  The committed example flag is `false`; missing or malformed values also disable
+  the feature. Keep rollout disabled against the hosted project during local testing.
+- Enabling backup covers existing and future diary entries. Pausing stops future
+  synchronization, retains the local diary and does not delete existing cloud data.
+  Foreground, reconnection, local changes and Sync now trigger bounded work; no
+  polling or background tasks are installed. Failed work retains its local outbox.
+- The public rollout flag is a release control, not a security boundary. Food-log
+  RPCs and row-level security enforce authenticated ownership. Schema validation
+  in this phase uses only local Supabase; hosted rollout/deployment is separate.
 - Nutrition-target rows are owner-isolated with Supabase row-level security.
 - The app uses a publishable Supabase client key; service-role credentials must
   never be embedded in the application or committed to the repository.

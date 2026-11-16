@@ -1,6 +1,7 @@
 import { type StyleProp, StyleSheet, View, type ViewStyle } from "react-native";
 
 import { useAppTheme } from "../theme/theme";
+import { isNutritionNumber } from "../utils/formatNutrition";
 
 type ProgressBarProps = {
   value: number;
@@ -23,8 +24,9 @@ export function ProgressBar({
 }: ProgressBarProps) {
   const theme = useAppTheme();
 
-  const safeValue = Math.max(value, 0);
-  const safeMax = Math.max(max, 0);
+  const valid = isNutritionNumber(value) && isNutritionNumber(max);
+  const safeValue = valid ? Math.max(value, 0) : 0;
+  const safeMax = valid ? Math.max(max, 0) : 0;
 
   const percentage =
     safeMax > 0 ? Math.min((safeValue / safeMax) * 100, 100) : 0;
@@ -35,11 +37,11 @@ export function ProgressBar({
     <View
       accessibilityRole="progressbar"
       accessibilityLabel={accessibilityLabel}
-      accessibilityValue={{
+      accessibilityValue={valid ? {
         min: 0,
         max: safeMax,
         now: currentValue,
-      }}
+      } : { text: "Unavailable" }}
       style={[
         styles.track,
         {

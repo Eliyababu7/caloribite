@@ -33,6 +33,7 @@ import {
   type NutritionGoal,
 } from "../types/healthProfile";
 import { confirmAction } from "../utils/confirmAction";
+import { formatCalories, formatMacroGrams } from "../utils/formatNutrition";
 
 type Drafts = { age: string; heightCm: string; weightKg: string };
 type DraftField = keyof Drafts;
@@ -636,14 +637,14 @@ export default function HealthProfileScreen() {
                   )}
                   {preview?.ok && (
                     <View style={styles.previewRows}>
-                      <Text style={styles.previewText}>Estimated BMR: {preview.estimate.bmr} kcal/day</Text>
-                      <Text style={styles.previewText}>Estimated maintenance: {preview.estimate.maintenanceCalories} kcal/day</Text>
+                      <Text style={styles.previewText}>Estimated BMR: {formatCalories(preview.estimate.bmr)} kcal/day</Text>
+                      <Text style={styles.previewText}>Estimated maintenance: {formatCalories(preview.estimate.maintenanceCalories)} kcal/day</Text>
                       <Text style={styles.previewText}>
-                        Goal adjustment: {preview.estimate.goalAdjustment > 0 ? "+" : ""}{preview.estimate.goalAdjustment} kcal/day
+                        Goal adjustment: {preview.estimate.goalAdjustment > 0 ? "+" : preview.estimate.goalAdjustment < 0 ? "-" : ""}{formatCalories(Math.abs(preview.estimate.goalAdjustment))} kcal/day
                       </Text>
-                      <Text style={styles.previewStrong}>Estimated calorie target: {preview.estimate.targets.calories} kcal/day</Text>
+                      <Text style={styles.previewStrong}>Estimated calorie target: {formatCalories(preview.estimate.targets.calories)} kcal/day</Text>
                       <Text style={styles.previewText}>
-                        Estimated macros: {preview.estimate.targets.protein} g protein, {preview.estimate.targets.carbs} g carbs, {preview.estimate.targets.fat} g fat
+                        Estimated macros: {formatMacroGrams(preview.estimate.targets.protein)} g protein, {formatMacroGrams(preview.estimate.targets.carbs)} g carbs, {formatMacroGrams(preview.estimate.targets.fat)} g fat
                       </Text>
                     </View>
                   )}

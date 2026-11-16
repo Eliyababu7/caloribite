@@ -5,6 +5,7 @@ import { useAccountFoodSearch } from "../services/foodSearch/useAccountFoodSearc
 import { useAppTheme } from "../theme/theme";
 import type { FoodSearchResult } from "../types/foodSearch";
 import { SavedFoodForm } from "./SavedFoodForm";
+import { formatCalories, formatMacroGrams } from "../utils/formatNutrition";
 
 type Props = { query: string; onSelect: (food: FoodSearchResult) => boolean };
 export function MyFoodsLibrary({ query, onSelect }: Props) {
@@ -106,7 +107,7 @@ export function MyFoodsLibrary({ query, onSelect }: Props) {
       <Text style={styles.title}>{food.name}</Text>
       {food.brand && <Text style={styles.text}>{food.brand}</Text>}
       {food.barcode && <Text style={styles.text}>Barcode: {food.barcode}</Text>}
-      <Text style={styles.text}>Per 100 g: {food.nutritionPer100g.calories} kcal | Protein {food.nutritionPer100g.protein} g | Carbohydrates {food.nutritionPer100g.carbs} g | Fat {food.nutritionPer100g.fat} g</Text>
+      <Text style={styles.text}>Per 100 g: {formatCalories(food.nutritionPer100g.calories)} kcal | Protein {formatMacroGrams(food.nutritionPer100g.protein)} g | Carbohydrates {formatMacroGrams(food.nutritionPer100g.carbs)} g | Fat {formatMacroGrams(food.nutritionPer100g.fat)} g</Text>
       {button(`Select saved ${food.name}`, () => { if (!onSelect(food)) setError("This food could not be opened. Try again or add food manually."); })}
       {manage && <View style={styles.row}>
         {button(`Edit ${food.name}`, () => { setEditing(food); setDeleting(null); setError(""); })}
