@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 import type * as TypeScript from "typescript";
+import * as nutritionFormatting from "../../../utils/formatNutrition";
 
 // A small hook host for exercising actual component handlers without installing
 // a native renderer. Native widgets and child components are adapter boundaries.
@@ -39,7 +40,7 @@ export function componentHarness(file: string, exportName: string, initialProps:
       slots[index] = deps;
     },
   };
-  const modules = { ...adapters, react, "react/jsx-runtime": {
+  const modules = { "../utils/formatNutrition": nutritionFormatting, ...adapters, react, "react/jsx-runtime": {
     jsx: (type: any, props: any) => ({ type, props }), jsxs: (type: any, props: any) => ({ type, props }),
   } };
   const exports: any = {};

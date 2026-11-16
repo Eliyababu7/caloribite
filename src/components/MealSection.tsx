@@ -5,6 +5,7 @@ import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
 import type { FoodLog, MealType } from "../types/food";
 import { FoodCard } from "./FoodCard";
+import { formatCalories } from "../utils/formatNutrition";
 
 type MealSectionProps = {
   mealType: MealType;
@@ -35,9 +36,9 @@ export function MealSection({
 
         <Text
           style={styles.summary}
-          accessibilityLabel={`${foods.length} ${itemLabel}, ${totalCalories} kilocalories`}
+          accessibilityLabel={`${foods.length} ${itemLabel}, ${formatCalories(totalCalories)} kilocalories`}
         >
-          {foods.length} {itemLabel} • {totalCalories} kcal
+          {foods.length} {itemLabel} • {formatCalories(totalCalories)} kcal
         </Text>
       </View>
 
@@ -83,6 +84,8 @@ function createStyles(theme: AppTheme) {
     },
 
     summary: {
+      flexShrink: 1,
+      maxWidth: "100%",
       fontSize: 13,
       fontWeight: "700",
       color: colors.textSecondary,

@@ -28,6 +28,7 @@ import { addDaysToDateKey, getLocalDateKey } from "../utils/date";
 import { resolveDiaryDateParam } from "../utils/diaryRoute";
 import { confirmAction } from "../utils/confirmAction";
 import { MEAL_TYPES } from "../utils/meal";
+import { formatCalories, formatPercentage, isNutritionNumber } from "../utils/formatNutrition";
 
 type SignOutError = {
   message: string;
@@ -138,6 +139,8 @@ export default function DashboardScreen() {
   const nutritionSummary = nutritionTargets
     ? createNutritionSummary(nutritionTotals, nutritionTargets)
     : null;
+  const validCalorieSummary = isNutritionNumber(nutritionTotals.calories) &&
+    isNutritionNumber(nutritionTargets?.calories);
 
   const handlePreviousDate = () => {
     setSelectedDateKey((currentDateKey) => {
@@ -385,14 +388,14 @@ export default function DashboardScreen() {
             <View style={styles.cardLead}>
               <Text style={styles.cardLabel}>Calories consumed</Text>
 
-              <Text style={styles.calorieNumber}>
-                {nutritionTotals.calories} kcal
+              <Text style={styles.calorieNumber} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                {formatCalories(nutritionTotals.calories)} kcal
               </Text>
             </View>
 
             <View style={styles.targetBadge}>
               <Text style={styles.targetBadgeText}>
-                {nutritionSummary.calorieProgress}%
+                {validCalorieSummary ? `${formatPercentage(nutritionSummary.calorieProgress)}%` : "Unavailable"}
               </Text>
             </View>
           </View>
@@ -406,19 +409,19 @@ export default function DashboardScreen() {
           />
 
           <View style={styles.calorieSummaryRow}>
-            <View>
+            <View style={styles.targetSummary}>
               <Text style={styles.summaryLabel}>Target</Text>
 
-              <Text style={styles.summaryValue}>
-                {nutritionTargets.calories} kcal
+              <Text style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                {formatCalories(nutritionTargets.calories)} kcal
               </Text>
             </View>
 
             <View style={styles.remainingSummary}>
               <Text style={styles.summaryLabel}>Remaining</Text>
 
-              <Text style={styles.summaryValue}>
-                {nutritionSummary.remainingCalories} kcal
+              <Text style={styles.summaryValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                {formatCalories(validCalorieSummary ? nutritionSummary.remainingCalories : null)} kcal
               </Text>
             </View>
           </View>
@@ -735,12 +738,20 @@ function createStyles(theme: AppTheme) {
 
     calorieSummaryRow: {
       flexDirection: "row",
+      flexWrap: "wrap",
       justifyContent: "space-between",
       gap: 16,
       marginBottom: 14,
     },
 
+    targetSummary: {
+      flexShrink: 1,
+      maxWidth: "100%",
+    },
+
     remainingSummary: {
+      flexShrink: 1,
+      maxWidth: "100%",
       alignItems: "flex-end",
     },
 

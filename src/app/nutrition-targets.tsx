@@ -17,6 +17,7 @@ import { type AuthIdentity, useAuth } from "../context/AuthContext";
 import { useNutritionTargets } from "../context/NutritionTargetsContext";
 import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
+import { formatCalories, formatMacroGrams } from "../utils/formatNutrition";
 import {
   DEFAULT_NUTRITION_TARGETS,
   NUTRITION_TARGET_LIMITS,
@@ -249,10 +250,10 @@ export default function NutritionTargetsScreen() {
     if (isSaving || authIdentity === null || nutritionTargets === null) return;
     const owner = createOwnershipSnapshot(authIdentity);
     const defaultDescription =
-      `${DEFAULT_NUTRITION_TARGETS.calories.toLocaleString()} kcal, ` +
-      `${DEFAULT_NUTRITION_TARGETS.protein} g protein, ` +
-      `${DEFAULT_NUTRITION_TARGETS.carbs} g carbohydrates and ` +
-      `${DEFAULT_NUTRITION_TARGETS.fat} g fat`;
+      `${formatCalories(DEFAULT_NUTRITION_TARGETS.calories)} kcal, ` +
+      `${formatMacroGrams(DEFAULT_NUTRITION_TARGETS.protein)} g protein, ` +
+      `${formatMacroGrams(DEFAULT_NUTRITION_TARGETS.carbs)} g carbohydrates and ` +
+      `${formatMacroGrams(DEFAULT_NUTRITION_TARGETS.fat)} g fat`;
 
     Alert.alert(
       "Restore default targets?",

@@ -6,6 +6,7 @@ import { hasIncompleteNutrition, INCOMPLETE_NUTRITION_WARNING } from "../service
 import { FOOD_SEARCH_MESSAGES } from "../services/foodSearch/foodSearchService";
 import type { FoodSearchResult } from "../types/foodSearch";
 import { useAppTheme, type AppTheme } from "../theme/theme";
+import { formatCalories, formatMacroGrams } from "../utils/formatNutrition";
 
 export function BarcodeLookupPanel({ onContinue }: { onContinue: (food: FoodSearchResult) => boolean }) {
   const foodSearchClient = useAccountFoodSearch();
@@ -23,7 +24,6 @@ export function BarcodeLookupPanel({ onContinue }: { onContinue: (food: FoodSear
   }, [controller]);
   const loading = state.status === "loading";
   const error = state.status in FOOD_SEARCH_MESSAGES ? state.status as keyof typeof FOOD_SEARCH_MESSAGES : null;
-  const nutrient = (value: number | null, unit: string) => value === null ? "Unavailable" : `${value}${unit}`;
 
   return <View style={styles.panel}>
     <Text style={styles.title} accessibilityRole="header">Find a packaged food</Text>
@@ -72,8 +72,8 @@ export function BarcodeLookupPanel({ onContinue }: { onContinue: (food: FoodSear
       <Text style={styles.title}>{state.product.name}</Text>
       {state.product.brand && <Text style={styles.text}>{state.product.brand}</Text>}
       <Text style={styles.text}>Barcode: {state.product.barcode}</Text>
-      <Text style={styles.text}>Per 100 g: {nutrient(state.product.nutritionPer100g.calories, " kcal")}</Text>
-      <Text style={styles.text}>Protein: {nutrient(state.product.nutritionPer100g.protein, " g")} | Carbohydrates: {nutrient(state.product.nutritionPer100g.carbs, " g")} | Fat: {nutrient(state.product.nutritionPer100g.fat, " g")}</Text>
+      <Text style={styles.text}>Per 100 g: {formatCalories(state.product.nutritionPer100g.calories)} kcal</Text>
+      <Text style={styles.text}>Protein: {formatMacroGrams(state.product.nutritionPer100g.protein)} g | Carbohydrates: {formatMacroGrams(state.product.nutritionPer100g.carbs)} g | Fat: {formatMacroGrams(state.product.nutritionPer100g.fat)} g</Text>
       <Text style={styles.text}>Data: {state.product.attributionLabel}</Text>
       {hasIncompleteNutrition(state.product) && <Text style={styles.text} accessibilityRole="alert">{INCOMPLETE_NUTRITION_WARNING}</Text>}
       {continueError && <Text style={styles.text} accessibilityRole="alert">This product could not be opened. Try another barcode or add food manually.</Text>}
