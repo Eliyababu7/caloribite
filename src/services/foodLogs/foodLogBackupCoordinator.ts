@@ -1,7 +1,7 @@
-import { FOOD_LOG_BACKUP_EXPLANATION, type BackupStatus, type BackupPreference, type createBackupPreferenceStorage,
+import { FOOD_LOG_BACKUP_EXPLANATION, FoodLogConsentDisabledError, type BackupStatus, type BackupPreference, type createBackupPreferenceStorage,
   type StoredBackupStatus } from "./foodLogBackupPreferences";
 import type { createFoodLogStorage, FoodLogEnvelope } from "./foodLogStorage";
-import { ownerMatches, type FoodLogOwner } from "./foodLogSyncTypes";
+import { FoodLogSyncError, ownerMatches, type FoodLogOwner } from "./foodLogSyncTypes";
 import { synchronizeFoodLogs } from "./foodLogSync";
 import type { FoodLogsRepository } from "../supabase/foodLogsRepository";
 
@@ -41,11 +41,29 @@ export function createFoodLogBackupCoordinator(deps: Dependencies) {
   let knownOperations = new Set<string>();
   let hasPending = false;
   let changeVersion = 0;
+  const choiceSource = Symbol("backup-choice");
+  let unsubscribePreference: (() => void) | null = null;
   const currentScope = () => !disposed && scope !== null && ownerMatches(deps.input().owner, scope) && deps.input().normal;
   const eligible = () => currentScope() && loaded && preference?.enabled === true && deps.input().rollout &&
     deps.input().hydrated && !!deps.input().token;
   const emit = () => { if (!disposed) deps.changed(); };
   const invalidate = () => { epoch++; abort?.abort(); deferred = false; };
+  function loadPreference(owner: FoodLogOwner) {
+    const readChoiceVersion = choiceVersion;
+    const isCurrent = () => currentScope() && ownerMatches(scope, owner) && choiceVersion === readChoiceVersion;
+    void deps.preferences.read(owner.userId, isCurrent).then(value => {
+      if (!isCurrent() || choiceVersion !== readChoiceVersion) return;
+      preference = value; loaded = true; status = value.enabled ? value.lastStatus ?? "pending" : "device"; emit();
+      if (eligible()) { if (active) deferred = true; else void trigger(); }
+    });
+  }
+  function preferenceChanged(source?: symbol) {
+    if (source === choiceSource || !currentScope()) return;
+    // Invalidate immediately, before asynchronous rehydration of the persisted choice.
+    invalidate(); choiceVersion++; preference = null; loaded = false; choiceBusy = false;
+    pendingChoice = null; preferenceError = null; status = "device"; emit();
+    loadPreference({ ...scope! });
+  }
   function snapshot(): BackupSnapshot {
     const input = deps.input();
     const owned = currentScope();
@@ -104,7 +122,24 @@ export function createFoodLogBackupCoordinator(deps: Dependencies) {
     const run = Promise.resolve().then(async () => {
       if (!isCurrent()) return;
       try {
-        const repository = deps.repository(owner, token, currentOwner, controller.signal);
+        const boundRepository = deps.repository(owner, token, currentOwner, controller.signal);
+        const authorized = async <T,>(dispatch: () => Promise<T>): Promise<T> => {
+          try {
+            return await deps.preferences.withEnabled(owner.userId, isCurrent, dispatch, controller.signal);
+          } catch (error) {
+            if (error instanceof FoodLogConsentDisabledError) {
+              if (isCurrent()) preferenceChanged();
+              throw new FoodLogSyncError("stale");
+            }
+            if (error instanceof FoodLogSyncError) throw error;
+            throw new FoodLogSyncError("storage");
+          }
+        };
+        const repository: FoodLogsRepository = {
+          owner: boundRepository.owner,
+          apply: batch => authorized(() => boundRepository.apply(batch)),
+          pull: (cursor, size, watermark) => authorized(() => boundRepository.pull(cursor, size, watermark)),
+        };
         if (!isCurrent()) return;
         const result = await (deps.synchronize ?? synchronizeFoodLogs)({ repository, storage: deps.storage, owner, currentOwner });
         if (!isCurrent() || result.status === "stale") return;
@@ -137,18 +172,15 @@ export function createFoodLogBackupCoordinator(deps: Dependencies) {
     binding = { ...input };
     if (changedBinding) invalidate();
     if (!sameScope) {
+      unsubscribePreference?.(); unsubscribePreference = null;
       scope = input.normal && input.owner ? { ...input.owner } : null;
       preference = null; loaded = false; choiceBusy = false; choiceVersion++; pendingChoice = null;
       preferenceError = null; status = "device"; knownOperations = new Set(); hasPending = false;
-      const owner = scope; const readChoiceVersion = choiceVersion;
+      const owner = scope;
       emit();
       if (!owner) return;
-      const isCurrent = () => currentScope() && ownerMatches(scope, owner);
-      void deps.preferences.read(owner.userId, isCurrent).then(value => {
-        if (!isCurrent() || choiceVersion !== readChoiceVersion) return;
-        preference = value; loaded = true; status = value.lastStatus ?? "pending"; emit();
-        if (eligible()) { if (active) deferred = true; else void trigger(); }
-      });
+      unsubscribePreference = deps.preferences.subscribe(owner.userId, preferenceChanged);
+      loadPreference(owner);
     } else {
       emit();
       if (changedBinding && eligible()) { if (active) deferred = true; else void trigger(); }
@@ -159,7 +191,7 @@ export function createFoodLogBackupCoordinator(deps: Dependencies) {
     if (!isCurrent()) return false;
     pendingChoice = enabled; choiceBusy = true; preferenceError = null; emit();
     try {
-      const saved = await deps.preferences.setEnabled(owner.userId, enabled, isCurrent);
+      const saved = await deps.preferences.setEnabled(owner.userId, enabled, isCurrent, choiceSource);
       if (!isCurrent()) return false;
       preference = saved; loaded = true; pendingChoice = null; status = enabled ? "pending" : "device";
       return true;
@@ -212,6 +244,6 @@ export function createFoodLogBackupCoordinator(deps: Dependencies) {
         if (active) deferred = true; else void trigger();
       }
     },
-    dispose() { disposed = true; invalidate(); },
+    dispose() { disposed = true; unsubscribePreference?.(); unsubscribePreference = null; invalidate(); },
   };
 }

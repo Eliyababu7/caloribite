@@ -11,13 +11,14 @@ import { foodLogStorage } from "../services/foodLogs/localFoodLogStorage";
 import { createFoodLogsRepository } from "../services/supabase/foodLogsRepository";
 import { createSessionBoundPostgrestClient } from "../services/supabase/supabaseClient";
 import { confirmAction } from "../utils/confirmAction";
+import { foodLogCoordination } from "../services/foodLogs/platformFoodLogCoordination";
 
 type BackupContextValue = BackupSnapshot & {
   enable: () => Promise<boolean>; disable: () => Promise<boolean>;
   retryChoice: () => Promise<boolean>; syncNow: () => Promise<void>;
 };
 const BackupContext = createContext<BackupContextValue | undefined>(undefined);
-const preferences = createBackupPreferenceStorage(AsyncStorage);
+const preferences = createBackupPreferenceStorage(AsyncStorage, foodLogCoordination);
 
 export function FoodLogSyncProvider({ children }: { children: ReactNode }) {
   const { authIdentity, session, recoveryState, isLoading, isSigningOut } = useAuth();

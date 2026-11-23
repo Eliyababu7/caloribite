@@ -269,3 +269,153 @@ This completes local Phase 5A finalization with the known audit baseline retaine
 and native release-build verification still pending. It is not a production
 release or deployment approval. No push, merge, deployment, hosted change, or
 diary-data access was performed.
+
+## Cross-tab safety corrections (16 November 2026, uncommitted)
+
+The read-only review reproduced two gaps in independent web runtimes: a stale
+whole-envelope writer could erase a completed deletion and its pending operation,
+and a sibling tab could retain enabled consent after another tab persisted pause.
+The fixes below are local working-tree changes based on `1891c30`; they have not
+been committed or pushed to PR #5.
+
+### Storage protection and fallback
+
+Web diary operations now acquire an exclusive, per-storage-key Web Lock before
+reading current bytes. The protected read/transform/validation/write includes
+first migration, add/delete, acknowledgement persistence/cleanup, reconciliation,
+and cursor updates. Separate module queues are no longer the cross-tab safety
+boundary. External storage notifications refresh diary subscribers by reading
+again under the lock; notifications are not used as a substitute for exclusion.
+Native platforms retain the existing in-process per-key queues.
+
+No dependency, storage schema/key migration, or hosted change was required. The
+existing localStorage/AsyncStorage bytes and legacy recovery key remain in place.
+Browser lock acquisition has a 10-second timeout and supports aborting queued
+network authorization requests. Once acquired, a storage write is allowed to
+settle rather than being incorrectly reported as cancelled after dispatch.
+
+The unsupported-browser fallback is deliberately fail-closed: without Web Locks
+(including insecure browser contexts), or when lock acquisition fails/times out,
+no unprotected migration or write is attempted. Diary hydration/mutation reports
+failure through the existing error handling; consent defaults to disabled on
+read failure, saving consent fails, and RPC authorization cannot dispatch. This
+can make the web diary unavailable until a supported HTTPS/localhost context is
+used or coordination succeeds. Existing bytes are preserved; there is no silent
+in-memory-only, single-tab-assumed, or unlocked-write fallback.
+
+### Consent and network ordering
+
+Persisted consent changes notify other tabs through storage events and same-tab
+controllers through local notifications. Relevant changes immediately invalidate
+cached consent, advance the work epoch, abort the current request signal, and
+reload the account-specific choice. Status-only preference writes do not cancel
+unrelated work. Subscriptions are removed on scope change and disposal.
+
+Every apply/pull RPC also re-reads and verifies persisted consent under its
+per-account preference lock before starting the request. Ownership and work
+validity are checked again after the read. This blocks subsequent RPCs even if a
+storage event is delayed. The consent lock is released after request dispatch,
+without waiting for the response, so pause is not blocked behind network latency.
+Pause aborts queued authorization and in-flight requests where supported and
+rejects stale responses. It cannot undo a request already accepted by the server.
+Re-enable still requires explicit confirmation and a successfully persisted,
+account-scoped enabled choice; delayed confirmations cannot override a newer
+choice notification.
+
+### Automated results and coverage
+
+The new browser harness loads independent module instances with separate queues
+and listeners, sharing only synthetic storage bytes and modeled browser lock/
+event primitives. It does not access real browser storage or diary records.
+Thirteen regressions cover concurrent add/delete, simultaneous first migration,
+mutation versus acknowledgements and reconciliation, external refresh, production
+web/native selection, unsupported browsers, lock rejection/timeout, cross-tab
+pause and abort, delayed events, explicit re-enable, queued authorization,
+account switching, and authorization-lock failure.
+
+| Check | Result after the cross-tab fixes |
+| --- | --- |
+| Application tests | Passed: 499 tests, 6 suites, no failures or skips |
+| TypeScript | Passed |
+| Expo compatibility | Passed: dependencies are up to date |
+| Expo Doctor 1.21.8 | Passed: 21/21 checks |
+| Temporary web export | Passed: two bundles and 15 static routes |
+| Full npm audit | 0 low, 3 moderate, 4 high, 0 critical |
+| Production-only npm audit | 0 low, 3 moderate, 4 high, 0 critical |
+| Diff/whitespace checks | Passed |
+
+Both audits retain the same advisory IDs, severities, and affected package/path
+records as the latest Phase 5A baseline; both exit 1 for the existing findings.
+No automatic fixes were applied. Audit reports are saved separately in the system
+temporary folder as `caloribite-audit-cross-tab-full.json` and
+`caloribite-audit-cross-tab-production.json`. The temporary export directory is
+`caloribite-cross-tab-web-d1fdaced12a14525b1724dc25f68ce97`; its only warnings were
+non-fatal color-environment notices.
+
+### Remaining verification limits
+
+The automated tests model independent
+runtimes and the Web Locks/storage-event contract; they do not establish real
+browser scheduling, suspended-tab behavior, or browser compatibility in practice.
+All concurrently writing tabs must run the corrected code. Older tabs that do
+not participate in Web Locks must be closed/reloaded before relying on these
+guarantees; the fix cannot coordinate an uncooperative old writer using the same
+storage key. Prior user-reported phone passes predate these corrections and do
+not constitute verification of them. The user-reported cross-tab results below
+supersede the earlier pending live-test status. Native release-build verification also
+remains pending.
+
+Historical SQL migrations, dependencies, `.env.local`, and rollout defaults were
+not changed. No hosted resource change, real diary-data access, commit, push,
+merge, or deployment was performed for these corrections.
+
+## Cross-tab finalization (23 November 2026)
+
+Initial inspection confirmed `feature/cloud-food-log-sync` at
+`1891c3094674019f60c0b57144f5c4321e84ea2b` with exactly the expected 13 pending
+files and no unexpected changes. Review found no blocking lock-coverage,
+deadlock, consent-race, or account-isolation issues. All envelope transformations
+run under the account-key lock; notifications queue fresh reads without awaiting
+them under the writer lock. RPC authorization holds only the preference lock and
+releases it after dispatch, before awaiting network responses. Epoch, choice
+version, and owner guards reject stale work and delayed confirmations.
+
+### Live results reported by the project owner
+
+The owner confirmed all four checks passed:
+
+1. Deleting in Tab A while adding in Tab B preserves the new entry and does not
+   resurrect the deleted entry after refreshing.
+2. Pausing backup in Tab A propagates to Tab B.
+3. An entry added while paused does not reach the phone.
+4. Explicitly re-enabling backup synchronizes that entry to the phone.
+
+These are user-reported live results, not independently observed or automated
+passes. Device/browser versions were not supplied. **Native release-build
+verification remains pending.** The unsupported-browser fail-closed limitation
+and requirement to reload older, uncooperative tabs still apply.
+
+### Final automated validation
+
+All 499 application tests passed (6 suites, no failures or skips). TypeScript,
+direct/full dependency-tree checks, Expo compatibility, Expo Doctor (21/21),
+and diff whitespace checks passed. The temporary web export produced two bundles
+and 15 static routes at `caloribite-finalize-web-2884f5b0fd13401795a0ef81822ff7e6`
+outside the repository. No export warnings or errors were found.
+
+Full and production-only audits each retain 0 low, 3 moderate, 4 high, and
+0 critical findings and exit 1 for those known findings. Compared with the saved
+cross-tab baseline, all five advisory IDs, severities, affected package records,
+and installation paths are unchanged. The only report differences are registry
+`fixAvailable` suggestions for expo-router, query-string, and decode-uri-component:
+the suggested major-version Router target advanced from 58.0.31 to 58.0.32.
+This is registry metadata, not an installed dependency change or new advisory.
+No dependency updates or audit fixes were applied. Final reports are saved as
+`caloribite-finalize-audit-full-verified.json` and
+`caloribite-finalize-audit-production-verified.json` in the system temporary folder.
+
+The sandbox initially blocked test subprocesses and registry access; the unchanged
+tests and network checks passed with the necessary access. No unexplained
+regressions were found. The 13 reviewed files are being finalized in the requested
+commit and normal push to the existing PR branch. No merge, deployment, rollout
+change, hosted-resource change, or diary-record access is part of this work.

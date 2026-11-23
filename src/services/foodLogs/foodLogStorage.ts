@@ -1,6 +1,7 @@
 import { FoodLogSyncError, isRevision, parseServerFoodLog, sameFood, serverFood, type ServerFoodLog } from "./foodLogSyncTypes";
 import type { FoodLog } from "../../types/food";
 import { parseLocalDateKey } from "../../utils/date";
+import { nativeFoodLogCoordination, type FoodLogCoordination } from "./foodLogCoordination";
 
 export type SyncEntry = { food: FoodLog; legacyId: string | null; server?: ServerFoodLog };
 export type FoodLogEnvelope = {
@@ -79,13 +80,14 @@ export function parseEnvelope(raw: string, userId: string): FoodLogEnvelope {
 
 // All hydration, migration and future acknowledgements/reconciliation share this
 // read-latest/write-once queue. No caller writes a captured array snapshot.
-export function createFoodLogStorage(storage: Storage, uuid: () => string) {
+export function createFoodLogStorage(storage: Storage, uuid: () => string, coordination: FoodLogCoordination = nativeFoodLogCoordination) {
+  const source = Symbol("food-log-storage");
   const listeners = new Map<string, Set<(envelope: FoodLogEnvelope) => void>>();
   function update(userId: string, isCurrent: () => boolean,
     transform: (latest: FoodLogEnvelope) => FoodLogEnvelope = value => value): Promise<FoodLogEnvelope> {
     const key = foodLogSyncKey(userId);
     const previous = queues.get(key) ?? Promise.resolve();
-    const work = previous.catch(() => undefined).then(async () => {
+    const work = previous.catch(() => undefined).then(() => coordination.exclusive(key, async () => {
       const guard = () => { if (!isCurrent()) throw new FoodLogSyncError("stale"); };
       guard();
       const raw = await storage.getItem(key);
@@ -113,13 +115,16 @@ export function createFoodLogStorage(storage: Storage, uuid: () => string) {
       // A dispatched AsyncStorage write cannot be cancelled. It may complete
       // after logout, but only under its captured owner's key; never publish it
       // into a different authentication generation.
-      if (raw !== encoded) await storage.setItem(key, encoded);
+      if (raw !== encoded) {
+        await storage.setItem(key, encoded);
+        coordination.publish(key, source);
+      }
       guard();
       if (raw !== encoded) for (const listener of [...(listeners.get(userId) ?? [])]) {
         try { listener(next); } catch { /* Observers never fail a durable local write. */ }
       }
       return next;
-    });
+    }));
     queues.set(key, work);
     const cleanup = () => { if (queues.get(key) === work) queues.delete(key); };
     void work.then(cleanup, cleanup);
@@ -129,7 +134,14 @@ export function createFoodLogStorage(storage: Storage, uuid: () => string) {
     subscribe(userId: string, listener: (envelope: FoodLogEnvelope) => void) {
       const scoped = listeners.get(userId) ?? new Set();
       scoped.add(listener); listeners.set(userId, scoped);
-      return () => { scoped.delete(listener); if (!scoped.size) listeners.delete(userId); };
+      let subscribed = true;
+      const unsubscribeExternal = coordination.subscribe(foodLogSyncKey(userId), changedBy => {
+        if (changedBy === source) return;
+        void update(userId, () => subscribed).then(envelope => {
+          if (subscribed) listener(envelope);
+        }).catch(() => { /* Failed refresh must not overwrite the last valid diary. */ });
+      });
+      return () => { subscribed = false; unsubscribeExternal(); scoped.delete(listener); if (!scoped.size) listeners.delete(userId); };
     },
     update,
     add(userId: string, isCurrent: () => boolean, food: FoodLog) {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { nativeFoodLogCoordination } from "../foodLogCoordination";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
@@ -107,6 +108,7 @@ test("production storage adapter initializes and mutates with only local depende
     "@react-native-async-storage/async-storage": { __esModule: true, default: localStorage },
     "expo-crypto": { randomUUID },
     "./foodLogStorage": storageModule,
+    "./platformFoodLogCoordination": { foodLogCoordination: nativeFoodLogCoordination },
   };
   const exports: any = {};
   runInNewContext(code, { exports, require(name: string) {

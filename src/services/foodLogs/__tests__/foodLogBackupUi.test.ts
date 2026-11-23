@@ -5,6 +5,7 @@ import * as coordinator from "../foodLogBackupCoordinator";
 import * as preferencesModule from "../foodLogBackupPreferences";
 import * as repositoryModule from "../../supabase/foodLogsRepository";
 import { owner, fixture, fakeServer } from "./syncFixtures";
+import { nativeFoodLogCoordination } from "../foodLogCoordination";
 
 function provider(options: {flag?:string;consent?:boolean;confirmed?:boolean;hydrated?:boolean;offline?:boolean}={}) {
   const f=fixture();const server=fakeServer();const prefs=new Map<string,string>();
@@ -20,6 +21,7 @@ function provider(options: {flag?:string;consent?:boolean;confirmed?:boolean;hyd
     "./AuthContext":{useAuth:()=>auth},"./FoodLogContext":{useFoodLogs:()=>({foodStorageHydrationState:options.hydrated===false?"loading":"ready"})},
     "../services/foodLogs/foodLogBackupCoordinator":coordinator,
     "../services/foodLogs/foodLogBackupPreferences":preferencesModule,
+    "../services/foodLogs/platformFoodLogCoordination": { foodLogCoordination: nativeFoodLogCoordination },
     "../services/foodLogs/localFoodLogStorage":{foodLogStorage:f.storage},
     "../services/supabase/foodLogsRepository":repositoryModule,
     "../services/supabase/supabaseClient":{createSessionBoundPostgrestClient(){clients++;return {rpc(name:any,args:any){
