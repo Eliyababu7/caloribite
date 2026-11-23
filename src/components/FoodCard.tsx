@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
 import type { FoodLog } from "../types/food";
+import { formatCalories, formatMacroGrams } from "../utils/formatNutrition";
 
 type FoodCardProps = {
   food: FoodLog;
@@ -21,12 +22,12 @@ export function FoodCard({ food, onDelete, disabled = false }: FoodCardProps) {
         <Text style={styles.foodName}>{food.foodName}</Text>
 
         <Text style={styles.foodMacros}>
-          {food.mealType} • P {food.protein}g • C {food.carbs}g • F {food.fat}g
+          {food.mealType} • P {formatMacroGrams(food.protein)} g • C {formatMacroGrams(food.carbs)} g • F {formatMacroGrams(food.fat)} g
         </Text>
       </View>
 
       <View style={styles.foodRight}>
-        <Text style={styles.foodCalories}>{food.calories} kcal</Text>
+        <Text style={styles.foodCalories} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{formatCalories(food.calories)} kcal</Text>
 
         <Pressable
           onPress={onDelete}
@@ -59,6 +60,7 @@ function createStyles(theme: AppTheme) {
       borderColor: colors.border,
       marginBottom: 12,
       flexDirection: "row",
+      flexWrap: "wrap",
       justifyContent: "space-between",
       alignItems: "center",
       gap: 12,
@@ -66,6 +68,7 @@ function createStyles(theme: AppTheme) {
 
     foodInfo: {
       flex: 1,
+      flexBasis: 140,
       minWidth: 0,
     },
 
@@ -83,6 +86,8 @@ function createStyles(theme: AppTheme) {
     },
 
     foodRight: {
+      flexShrink: 1,
+      maxWidth: "100%",
       alignItems: "flex-end",
     },
 

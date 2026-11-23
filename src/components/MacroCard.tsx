@@ -11,6 +11,7 @@ import { calculateProgress } from "../services/nutrition/nutritionService";
 import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
 import { ProgressBar } from "./ProgressBar";
+import { formatMacroGrams, formatPercentage, isNutritionNumber } from "../utils/formatNutrition";
 
 type MacroCardProps = {
   label: string;
@@ -32,17 +33,17 @@ export function MacroCard({
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const progress = calculateProgress(current, target);
+  const progress = isNutritionNumber(current) && isNutritionNumber(target)
+    ? calculateProgress(current, target) : null;
 
   return (
     <View style={[styles.container, style]}>
       <View style={styles.topRow}>
         <Text style={styles.label}>{label}</Text>
 
-        <Text style={styles.value}>
-          {current}
-          {unit} / {target}
-          {unit}
+        <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+          {formatMacroGrams(current)}
+          {` ${unit} / ${formatMacroGrams(target)} ${unit}`}
         </Text>
       </View>
 
@@ -55,7 +56,7 @@ export function MacroCard({
         style={styles.progressBar}
       />
 
-      <Text style={styles.hint}>{progress}% of daily target</Text>
+      <Text style={styles.hint}>{progress === null ? "Daily target progress unavailable" : `${formatPercentage(progress)}% of daily target`}</Text>
     </View>
   );
 }
@@ -70,6 +71,7 @@ function createStyles(theme: AppTheme) {
 
     topRow: {
       flexDirection: "row",
+      flexWrap: "wrap",
       justifyContent: "space-between",
       marginBottom: 8,
       gap: 12,
@@ -82,6 +84,9 @@ function createStyles(theme: AppTheme) {
     },
 
     value: {
+      flexShrink: 1,
+      minWidth: 0,
+      maxWidth: "100%",
       fontSize: 15,
       fontWeight: "700",
       color: colors.textSecondary,

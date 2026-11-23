@@ -23,6 +23,7 @@ import type { AppTheme } from "../theme/theme";
 import { useAppTheme } from "../theme/theme";
 import { formatDiaryDate } from "../utils/date";
 import { resolveDiaryDateParam } from "../utils/diaryRoute";
+import { formatCalories, formatMacroGrams } from "../utils/formatNutrition";
 
 export default function SearchFoodScreen() {
   const router = useRouter();
@@ -92,7 +93,6 @@ export default function SearchFoodScreen() {
   };
   const searchError = searchState.status in FOOD_SEARCH_MESSAGES ? searchState.status as FoodSearchErrorKind : null;
   const showStarterFoods = searchState.status === "idle" || searchState.status === "empty" || searchError !== null;
-  const nutrientText = (value: number | null, unit: string) => value === null ? "Unavailable" : `${value}${unit}`;
 
   const loggedDate = resolveDiaryDateParam(params.loggedDate);
 
@@ -236,8 +236,8 @@ export default function SearchFoodScreen() {
               <Text style={styles.selectText}>USDA</Text>
               <Text style={styles.foodName}>{food.name}</Text>
               {food.brand && <Text style={styles.foodMacros}>{food.brand}</Text>}
-              <Text style={styles.foodCalories}>{nutrientText(food.nutritionPer100g.calories, " kcal")} per 100 g</Text>
-              <Text style={styles.foodMacros}>P {nutrientText(food.nutritionPer100g.protein, " g")} | C {nutrientText(food.nutritionPer100g.carbs, " g")} | F {nutrientText(food.nutritionPer100g.fat, " g")}</Text>
+              <Text style={styles.foodCalories}>{formatCalories(food.nutritionPer100g.calories)} kcal per 100 g</Text>
+              <Text style={styles.foodMacros}>P {formatMacroGrams(food.nutritionPer100g.protein)} g | C {formatMacroGrams(food.nutritionPer100g.carbs)} g | F {formatMacroGrams(food.nutritionPer100g.fat)} g</Text>
             </View>
             {selectedId === food.externalId ? <ActivityIndicator color={theme.colors.accent} accessibilityLabel={`Loading ${food.name} details`} /> : <Text style={styles.selectText}>Select</Text>}
           </Pressable>)}
@@ -273,12 +273,12 @@ export default function SearchFoodScreen() {
                 <Text style={styles.foodName}>{food.foodName}</Text>
 
                 <Text style={styles.foodMacros}>
-                  P {food.protein}g • C {food.carbs}g • F {food.fat}g
+                  P {formatMacroGrams(food.protein)} g • C {formatMacroGrams(food.carbs)} g • F {formatMacroGrams(food.fat)} g
                 </Text>
               </View>
 
               <View style={styles.foodRight}>
-                <Text style={styles.foodCalories}>{food.calories} kcal</Text>
+                <Text style={styles.foodCalories} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{formatCalories(food.calories)} kcal</Text>
 
                 <Text style={styles.selectText}>Select</Text>
               </View>
@@ -404,6 +404,7 @@ function createStyles(theme: AppTheme) {
       borderColor: colors.border,
       marginBottom: 12,
       flexDirection: "row",
+      flexWrap: "wrap",
       justifyContent: "space-between",
       alignItems: "center",
       gap: 12,
@@ -411,6 +412,7 @@ function createStyles(theme: AppTheme) {
 
     foodInfo: {
       flex: 1,
+      flexBasis: 140,
       minWidth: 0,
     },
 
@@ -428,6 +430,8 @@ function createStyles(theme: AppTheme) {
     },
 
     foodRight: {
+      flexShrink: 1,
+      maxWidth: "100%",
       alignItems: "flex-end",
     },
 
